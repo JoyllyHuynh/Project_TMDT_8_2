@@ -1,0 +1,34 @@
+STT Nhóm chức năng Chi tiết chức năng
+1 Bắt buộc Đăng ký (gửi email xác nhận) Bắt buộc + tự chọn: tối đa 8đ Đăng nhập Bổ sung: 2đ
+Đăng xuất
+Lấy lại mật khẩu
+Xem chi tiết sản phẩm
+Quản lý giỏ hàng
+Đặt hàng
+Thanh toán trực tuyến
+Xem lịch sử mua hàng
+Thống kê biểu đồ cột theo tuỳ chọn thời gian (từ ngày nào đến ngày nào)
+Thống kê biểu đồ tròn
+Admin quản lý cơ bản (người dùng, sản phẩm, đơn hàng)
+Các chức năng quản lý cơ bản của người bán (sản phẩm, doanh thu, đơn hàng)
+2 Tự chọn Đăng nhập bằng Google
+(chọn 10) Đăng nhập bằng Facebook
+Cập nhật thông tin cá nhân
+Cập nhật trạng thái đơn hàng
+Hủy đơn hàng (quy trình huỷ đơn, thông báo, hoàn tiền)
+Đánh giá sản phẩm đã mua
+Báo cáo gian hàng / khách hàng (bao gồm báo cáo và xử lý báo cáo)
+Lọc sản phẩm theo các tiêu chí khác nhau (thương hiệu, loại,...)
+Sắp xếp thứ tự hiển thị (theo giá tăng dần, giảm dần, theo số lượng đã bán...)
+Bình luận sản phẩm (đặt câu hỏi, không phải đánh giá sản phẩm)
+Trả lời bình luận
+Tìm kiếm gian hàng
+Xem sản phẩm thuộc gian hàng
+Áp dụng khuyến mãi
+Tự động tích điểm khi mua hàng
+Qui đổi điểm thưởng thành khuyến mãi khi đặt hàng
+Hiển thị trên trang chủ danh sách sản phẩm bán chạy
+Hiển thị trên trang chủ danh sách sản phẩm mới nhất
+Hiển thị trên trang chủ danh sách sản phẩm được xem nhiều nhất
+Hiển thị danh sách sản phẩm gợi ý
+3 Bổ sung Các chức năng nhóm tự đề xuất, thay thế cho các chức năng tự chọn (trao đổi ở giờ thực hành)
