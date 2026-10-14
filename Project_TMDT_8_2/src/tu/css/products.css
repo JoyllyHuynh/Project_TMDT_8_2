@@ -1,0 +1,118 @@
+/* Page-specific tweaks for products.html — phần lớn tái sử dụng style.css + admin-common.css */
+
+#productsTable td:nth-child(1) { min-width: 240px; }
+#productsTable td:nth-child(3) { color: var(--text-muted); }
+
+/* Ảnh đại diện sản phẩm vẽ hoàn toàn bằng CSS + icon (không tải ảnh ngoài,
+   tránh phụ thuộc mạng và không dùng ảnh bìa có bản quyền) */
+.product-thumb {
+    width: 34px;
+    height: 44px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.product-thumb::after {
+    content: '';
+    position: absolute;
+    left: 6px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: rgba(255, 255, 255, 0.35);
+}
+
+.product-thumb .material-symbols-outlined {
+    color: #fff;
+    font-size: 17px;
+}
+
+.product-thumb.tone-orange { background: linear-gradient(160deg, #fdba74, #ea580c); }
+.product-thumb.tone-blue { background: linear-gradient(160deg, #60a5fa, #1d4ed8); }
+.product-thumb.tone-green { background: linear-gradient(160deg, #6ee7b7, #047857); }
+.product-thumb.tone-purple { background: linear-gradient(160deg, #c4b5fd, #6d28d9); }
+
+.product-title-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.product-title-cell .product-title-text {
+    min-width: 0;
+}
+
+.product-title-cell .product-title-text > span {
+    display: block;
+    color: var(--text-main);
+    font-weight: 600;
+    font-size: .88rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.product-title-cell .product-title-text .product-code {
+    color: var(--text-muted);
+    font-size: .76rem;
+    font-weight: 600;
+}
+
+/* Dòng phụ hiển thị trạng thái hiển thị ngay dưới badge kiểm duyệt */
+.mod-visibility-sub {
+    display: block;
+    margin-top: 4px;
+    color: var(--text-muted);
+    font-size: .72rem;
+    font-weight: 600;
+}
+
+/* Khối ảnh lớn trong modal chi tiết */
+.product-detail-head {
+    display: flex;
+    gap: 14px;
+    padding: 14px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--surface-bg);
+    margin-bottom: 18px;
+}
+
+.product-detail-head .product-thumb {
+    width: 64px;
+    height: 84px;
+}
+
+.product-detail-head .product-thumb .material-symbols-outlined {
+    font-size: 28px;
+}
+
+.product-detail-desc {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--surface-bg);
+    color: var(--text-secondary);
+    font-size: .84rem;
+    line-height: 1.6;
+    white-space: pre-line;
+}
+
+.product-reject-note {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1px solid #fecaca;
+    border-radius: var(--radius-md);
+    background: var(--danger-bg);
+    color: var(--danger-text);
+    font-size: .82rem;
+    line-height: 1.55;
+}
