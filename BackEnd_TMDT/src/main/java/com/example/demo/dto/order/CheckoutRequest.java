@@ -1,6 +1,7 @@
 package com.example.demo.dto.order;
 
 import com.example.demo.model.enums.PaymentMethod;
+import com.example.demo.model.enums.ShippingMethod;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -28,6 +29,7 @@ public class CheckoutRequest {
     private String shippingAddress;
 
     private String buyerNote;
+    private ShippingMethod shippingMethod =  ShippingMethod.STANDARD;
     private BigDecimal shippingFee = BigDecimal.ZERO;
     private PaymentMethod paymentMethod = PaymentMethod.VNPAY;
     private String idempotencyKey;

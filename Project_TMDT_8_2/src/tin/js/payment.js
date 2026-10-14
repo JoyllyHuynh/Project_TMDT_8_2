@@ -9,8 +9,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     const buyNowItem = JSON.parse(rawData);
-    const productId = buyNowItem.productId;
-    const quantity = buyNowItem.quantity || 1;
+    const productId = Number(buyNowItem.productId);
+    const quantity = Number(buyNowItem.quantity) || 1;
 
     // 2. Gọi API lấy dữ liệu thực tế từ DB
     try {
@@ -65,7 +65,7 @@ function renderPaymentSummary(product, quantity) {
                             <p class="package-item-meta">${escapeHtml(product.publisherName || "NXB Kim Đồng")} • Tình trạng: ${product.conditionPercent || 100}% Like New</p>
                             <div class="package-item-tags">
                                 <span class="tag-limited">Đã kiểm định</span>
-                                <span class="tag-qty">SL: ${quantity}</span>
+                                <span class="tag-qty">SL: 0${quantity}</span>
                             </div>
                         </div>
                         <div class="package-item-price">
@@ -77,12 +77,34 @@ function renderPaymentSummary(product, quantity) {
         `;
     }
 
-    // Cập nhật bảng tính tiền bên cột phải (Order Summary)
-    const breakdownItems = document.querySelectorAll(".summary-breakdown-list .breakdown-item .item-value");
-    if (breakdownItems.length > 0) breakdownItems[0].textContent = formatVnd(subtotal);
-
-    const grandTotalEl = document.querySelector(".grand-total-amount");
-    if (grandTotalEl) grandTotalEl.textContent = formatVnd(subtotal);
+    // Cập nhật Bảng tính chi phí bên cột phải cho đúng 1 sản phẩm Mua Ngay
+    const summaryList = document.querySelector(".summary-breakdown-list");
+    if (summaryList) {
+        summaryList.innerHTML = `
+            <div class="breakdown-item">
+                <span class="item-label">Tạm tính tiền sách (1 món):</span>
+                <span class="item-value">${formatVnd(subtotal)}</span>
+            </div>
+            <div class="breakdown-item">
+                <span class="item-label">Đóng gói chống sốc 3 lớp:</span>
+                <span class="item-value text-free">Miễn phí</span>
+            </div>
+            <div class="breakdown-item">
+                <span class="item-label">Phí vận chuyển tiêu chuẩn:</span>
+                <span class="item-value">0₫</span>
+            </div>
+            <div class="summary-separator-line"></div>
+            <div class="total-payable-row">
+                <div class="total-text-group">
+                    <span class="total-title">Tổng Thanh Toán:</span>
+                    <span class="total-note">Đã bao gồm VAT & Phí bảo hiểm truyện hiếm 100%</span>
+                </div>
+                <div class="total-price-display">
+                    <span class="grand-total-amount">${formatVnd(subtotal)}</span>
+                </div>
+            </div>
+        `;
+    }
 
     const qrAmountEl = document.querySelector(".info-row .highlight-amount");
     if (qrAmountEl) qrAmountEl.textContent = formatVnd(subtotal);
@@ -97,17 +119,28 @@ function setupCheckoutSubmit(productId, quantity) {
 
         const selectedPayment = document.querySelector('input[name="payment_method"]:checked')?.value || "vnpay";
 
+        // Lấy tên, SĐT, địa chỉ và đảm bảo không bao giờ bị rỗng
+        let rawPhone = document.querySelector(".recipient-phone")?.textContent.trim() || "0988123456";
+        let cleanPhone = rawPhone.replace(/\D/g, "");
+        if (!cleanPhone) cleanPhone = "0988123456"; // Fallback nếu lọc xong bị rỗng
+
+        let recipientName = document.querySelector(".recipient-name")?.textContent.trim() || "Nguyễn An Vinh";
+        let shippingAddress = document.querySelector(".recipient-address")?.textContent.trim() || "124 Hoàng Hoa Thám, Phường Liễu Giai, Quận Ba Đình, Hà Nội";
+
         const checkoutPayload = {
-            productId: productId,
-            quantity: quantity,
-            recipientName: document.querySelector(".recipient-name")?.textContent.trim() || "Nguyễn An Vinh",
-            recipientPhone: document.querySelector(".recipient-phone")?.textContent.trim() || "0988123456",
-            shippingAddress: document.querySelector(".recipient-address")?.textContent.trim() || "124 Hoàng Hoa Thám, Phường Liễu Giai, Quận Ba Đình, Hà Nội",
+            productId: Number(productId),
+            quantity: Number(quantity),
+            recipientName: recipientName,
+            recipientPhone: cleanPhone,
+            shippingAddress: shippingAddress,
             buyerNote: "Hàng truyện tranh sưu tầm dễ móp gáy, vui lòng nhẹ tay.",
+            shippingMethod: "STANDARD",
             shippingFee: 0,
             paymentMethod: selectedPayment.toUpperCase() === "COD" ? "COD" : "VNPAY",
             idempotencyKey: window.crypto?.randomUUID ? window.crypto.randomUUID() : String(Date.now())
         };
+
+        console.log("Payload gửi sang Backend:", checkoutPayload);
 
         try {
             submitBtn.disabled = true;
@@ -115,14 +148,14 @@ function setupCheckoutSubmit(productId, quantity) {
 
             const res = await apiRequest("/api/orders/buy-now", {
                 method: "POST",
-                body: JSON.stringify(checkoutPayload)
+                body: checkoutPayload
             });
 
             alert("Đặt hàng Mua Ngay thành công! Mã đơn: " + (res.data?.orderCode || ""));
             sessionStorage.removeItem("buyNowItem");
             window.location.href = "../../thuc/html/page3.html";
         } catch (err) {
-            console.error("Lỗi đặt hàng:", err);
+            console.error("Lỗi đặt hàng chi tiết:", err);
             alert("Đặt hàng thất bại: " + (err.message || "Vui lòng kiểm tra lại trạng thái đăng nhập."));
             submitBtn.disabled = false;
             submitBtn.querySelector("span").textContent = "Xác Nhận Thanh Toán";

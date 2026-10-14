@@ -37,7 +37,10 @@ public class OrderService {
         Product product = productRepository.findByIdAndDeletedAtIsNull(request.getProductId())
                 .filter(p -> Boolean.TRUE.equals(p.getActive()))
                 .orElseThrow(() -> ApiException.notFound("Sản phẩm không tồn tại hoặc đã bị ẩn."));
-
+        // kiem tra sp phai do nguoi do ban k
+        if(product.getSeller().getId().equals(buyer.getId())){
+            throw ApiException.badRequest("Bạn không thể tự mua sản phẩm do chính mình đăng bán.");
+        }
         // 1. Kiểm tra tồn kho
         if (product.getStockQuantity() < request.getQuantity()) {
             throw ApiException.badRequest("Số lượng sản phẩm trong kho không đủ.");
@@ -66,6 +69,7 @@ public class OrderService {
         order.setBuyerNote(request.getBuyerNote());
         order.setStatus(OrderStatus.WAITING_CONFIRM);
         order.setPaymentStatus(OrderPaymentStatus.PENDING);
+
         Order savedOrder = orderRepository.save(order);
 
         // 5. Khởi tạo Chi tiết đơn hàng (OrderItem)
