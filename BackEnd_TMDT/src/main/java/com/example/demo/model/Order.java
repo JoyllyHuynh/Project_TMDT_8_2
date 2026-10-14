@@ -2,6 +2,7 @@ package com.example.demo.model;
 
 import com.example.demo.model.enums.OrderPaymentStatus;
 import com.example.demo.model.enums.OrderStatus;
+import com.example.demo.model.enums.PaymentMethod;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -28,8 +29,8 @@ public class Order {
     @Column(name = "order_code", nullable = false, unique = true, length = 60)
     private String orderCode;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "checkout_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "checkout_id", nullable = true)
     private CheckoutBatch checkout;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
