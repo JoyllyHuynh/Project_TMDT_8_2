@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -70,6 +71,7 @@ public class OrderService {
         order.setStatus(OrderStatus.WAITING_CONFIRM);
         order.setPaymentStatus(OrderPaymentStatus.PENDING);
 
+
         Order savedOrder = orderRepository.save(order);
 
         // 5. Khởi tạo Chi tiết đơn hàng (OrderItem)
@@ -88,5 +90,30 @@ public class OrderService {
         OrderItem savedItem = orderItemRepository.save(orderItem);
 
         return OrderResponse.from(savedOrder, List.of(savedItem));
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderResponse> getMyOrders(String statusFilter, String keyword) {
+        UserPrincipal principal = SecurityUtils.currentUser();
+
+        // Lấy tất cả đơn hàng của buyer theo buyerId
+        List<Order> orders = orderRepository.findByBuyerIdOrderByCreatedAtDesc(principal.getId());
+
+        return orders.stream()
+                .filter(order -> {
+                    if (statusFilter == null || statusFilter.isBlank() || statusFilter.equalsIgnoreCase("ALL")) return true;
+                    return order.getStatus().name().equalsIgnoreCase(statusFilter);
+                })
+                .filter(order -> {
+                    if (keyword == null || keyword.isBlank()) return true;
+                    String kw = keyword.toLowerCase();
+                    return order.getOrderCode().toLowerCase().contains(kw)
+                            || (order.getSeller() != null && order.getSeller().getFullName() != null && order.getSeller().getFullName().toLowerCase().contains(kw));
+                })
+                .map(order -> {
+                    List<OrderItem> items = orderItemRepository.findByOrder(order);
+                    return OrderResponse.from(order, items);
+                })
+                .collect(Collectors.toList());
     }
 }
