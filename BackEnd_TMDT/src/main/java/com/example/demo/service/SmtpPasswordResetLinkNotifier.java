@@ -15,6 +15,7 @@ import jakarta.mail.internet.MimeMessage;
 @Slf4j
 @ConditionalOnProperty(name = "app.auth.password-reset.email-enabled", havingValue = "true")
 public class SmtpPasswordResetLinkNotifier implements PasswordResetLinkNotifier {
+    
 
     private final JavaMailSender mailSender;
 
