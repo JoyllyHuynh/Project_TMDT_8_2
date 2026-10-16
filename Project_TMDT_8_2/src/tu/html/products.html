@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý sản phẩm | BookMooch Admin Console</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/admin-common.css">
+    <link rel="stylesheet" href="../css/products.css">
+</head>
+<body>
+<div class="app-container">
+    <div id="sidebarContainer" data-active="products"></div>
+
+    <div class="main-wrapper">
+        <header class="top-header">
+            <div class="header-left">
+                <button class="sidebar-toggle" id="sidebarToggle"><span class="material-symbols-outlined">menu</span></button>
+                <div class="store-selector">
+                    <span class="material-symbols-outlined">admin_panel_settings</span>
+                    <span>Trung tâm Quản trị</span>
+                </div>
+                <div class="global-search">
+                    <span class="material-symbols-outlined">search</span>
+                    <input type="text" id="productSearch" placeholder="Tìm tên sách, mã sản phẩm, người bán...">
+                    <span class="search-shortcut">⌘K</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <button class="nav-icon-btn" title="Thông báo mới" onclick="showToast('Có bài đăng mới đang chờ kiểm duyệt')">
+                    <span class="material-symbols-outlined">notifications</span>
+                    <span class="notification-badge-dot"></span>
+                </button>
+                <div class="user-profile-menu">
+                    <div class="user-details">
+                        <div class="user-name" data-admin-name>Nguyễn Minh Admin</div>
+                        <div class="user-role" data-admin-role>Super Admin</div>
+                    </div>
+                    <img src="https://ui-avatars.com/api/?name=Admin&background=9d4300&color=fff&bold=true" class="user-avatar" alt="Avatar quản trị viên">
+                </div>
+            </div>
+        </header>
+
+        <main class="content-body">
+            <div class="page-header">
+                <div class="breadcrumb-tag"><span class="material-symbols-outlined" style="font-size:14px;">inventory_2</span> Quản trị hệ thống • Sản phẩm</div>
+                <div class="page-title-row">
+                    <div>
+                        <h2 class="page-title">Quản lý sản phẩm</h2>
+                        <p class="page-subtitle">Theo dõi toàn bộ bài đăng trên sàn, kiểm duyệt nội dung và xử lý các sản phẩm vi phạm chính sách</p>
+                    </div>
+                    <div class="header-action-group">
+                        <button class="btn btn-outline" onclick="showToast('Đang xuất danh sách sản phẩm (CSV)')">
+                            <span class="material-symbols-outlined">download</span> Xuất danh sách
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <section class="kpi-grid">
+                <div class="kpi-card">
+                    <div class="kpi-content">
+                        <span class="kpi-label">Tổng số sản phẩm</span>
+                        <span class="kpi-value" id="kpiTotal">0</span>
+                        <span class="kpi-trend neutral"><span class="material-symbols-outlined" style="font-size:16px;">inventory_2</span> Toàn sàn</span>
+                    </div>
+                    <div class="kpi-icon-wrapper primary"><span class="material-symbols-outlined" style="font-size:26px;">menu_book</span></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-content">
+                        <span class="kpi-label">Chờ kiểm duyệt</span>
+                        <span class="kpi-value" id="kpiPending" style="color:#d97706;">0</span>
+                        <span class="kpi-trend warning"><span class="material-symbols-outlined" style="font-size:16px;">hourglass_top</span> Cần xử lý sớm</span>
+                    </div>
+                    <div class="kpi-icon-wrapper warning"><span class="material-symbols-outlined" style="font-size:26px;">pending_actions</span></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-content">
+                        <span class="kpi-label">Đang hiển thị</span>
+                        <span class="kpi-value" id="kpiApproved" style="color:#16a34a;">0</span>
+                        <span class="kpi-trend positive"><span class="material-symbols-outlined" style="font-size:16px;">visibility</span> Đã duyệt &amp; đang bán</span>
+                    </div>
+                    <div class="kpi-icon-wrapper success"><span class="material-symbols-outlined" style="font-size:26px;">check_circle</span></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-content">
+                        <span class="kpi-label">Bị từ chối / đã ẩn</span>
+                        <span class="kpi-value" id="kpiHidden" style="color:#dc2626;">0</span>
+                        <span class="kpi-trend warning"><span class="material-symbols-outlined" style="font-size:16px;">block</span> Không công khai với người mua</span>
+                    </div>
+                    <div class="kpi-icon-wrapper danger" style="background: var(--danger-bg); color: var(--danger);"><span class="material-symbols-outlined" style="font-size:26px;">visibility_off</span></div>
+                </div>
+            </section>
+
+            <div class="filter-tabs-bar" id="productFilterTabs">
+                <button class="tab-chip active" data-filter="all">Tất cả <span class="tab-count" id="tabCountAll">0</span></button>
+                <button class="tab-chip" data-filter="pending">Chờ duyệt <span class="tab-count" id="tabCountPending">0</span></button>
+                <button class="tab-chip" data-filter="approved">Đã duyệt <span class="tab-count" id="tabCountApproved">0</span></button>
+                <button class="tab-chip" data-filter="rejected">Từ chối <span class="tab-count" id="tabCountRejected">0</span></button>
+                <button class="tab-chip" data-filter="hidden">Đã ẩn <span class="tab-count" id="tabCountHidden">0</span></button>
+            </div>
+
+            <div class="content-card">
+                <div class="content-card-header">
+                    <div class="content-card-title"><span class="material-symbols-outlined">list_alt</span> Danh sách sản phẩm</div>
+                </div>
+                <div class="table-responsive">
+                    <table class="data-table" id="productsTable">
+                        <thead>
+                        <tr>
+                            <th>Sản phẩm</th>
+                            <th>Người bán</th>
+                            <th>Thể loại</th>
+                            <th style="text-align:right;">Giá</th>
+                            <th style="text-align:center;">Tồn kho</th>
+                            <th style="text-align:center;">Kiểm duyệt</th>
+                            <th style="text-align:center;">Thao tác</th>
+                        </tr>
+                        </thead>
+                        <tbody id="productsTableBody"></tbody>
+                    </table>
+                </div>
+                <div class="pagination-wrapper">
+                    <div class="pagination-info" id="productsPaginationInfo"></div>
+                    <div class="pagination-controls" id="productsPaginationControls"></div>
+                </div>
+            </div>
+
+            <div class="policy-banner">
+                <div class="policy-banner-content">
+                    <div class="policy-icon-circle"><span class="material-symbols-outlined">verified_user</span></div>
+                    <div class="policy-text">
+                        <h4>Quy trình kiểm duyệt sản phẩm</h4>
+                        <p>Mọi bài đăng mới hoặc chỉnh sửa đều ở trạng thái "Chờ duyệt". Sản phẩm chỉ hiển thị công khai sau khi Admin phê duyệt, và sẽ bị ẩn nếu bị từ chối hoặc xử lý vi phạm.</p>
+                    </div>
+                </div>
+                <button class="btn btn-outline btn-sm" onclick="openModal('productPolicyModal')">Xem quy trình đầy đủ</button>
+            </div>
+        </main>
+    </div>
+</div>
+
+<!-- PRODUCT DETAIL MODAL -->
+<div class="modal-backdrop" id="productDetailModal" style="display:none;">
+    <div class="modal-dialog" style="max-width:600px; text-align:left;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+            <h3 class="modal-title" style="margin:0;">Chi tiết sản phẩm</h3>
+            <button onclick="closeModal('productDetailModal')" style="background:none;border:none;font-size:22px;color:#94a3b8;cursor:pointer;">&times;</button>
+        </div>
+        <div id="productDetailBody"></div>
+        <div class="modal-actions" style="justify-content:flex-end; margin-top:22px;">
+            <div id="productDetailExtraActions"></div>
+            <button class="btn btn-outline" onclick="closeModal('productDetailModal')">Đóng</button>
+        </div>
+    </div>
+</div>
+
+<!-- APPROVE MODAL -->
+<div class="modal-backdrop" id="productApproveModal" style="display:none;">
+    <div class="modal-dialog" style="max-width:460px;">
+        <h3 class="modal-title" style="text-align:center;">Xác nhận phê duyệt</h3>
+        <p class="modal-desc" style="text-align:center;">
+            Phê duyệt sản phẩm <strong id="approveProductName">—</strong>?<br>
+            Sản phẩm sẽ được hiển thị công khai với người mua ngay sau khi duyệt.
+        </p>
+        <div class="modal-actions">
+            <button class="btn btn-outline" onclick="closeModal('productApproveModal')">Quay lại</button>
+            <button class="btn btn-primary" onclick="confirmApprove()"><span class="material-symbols-outlined" style="font-size:16px;">check</span> Phê duyệt</button>
+        </div>
+    </div>
+</div>
+
+<!-- REJECT MODAL -->
+<div class="modal-backdrop" id="productRejectModal" style="display:none;">
+    <div class="modal-dialog" style="max-width:500px; text-align:left;">
+        <h3 class="modal-title" style="text-align:center;">Từ chối sản phẩm</h3>
+        <p class="modal-desc" style="text-align:center;">Từ chối <strong id="rejectProductName">—</strong>. Người bán sẽ nhận được lý do bên dưới.</p>
+        <div class="field">
+            <label for="rejectReasonSelect">Lý do từ chối</label>
+            <select id="rejectReasonSelect">
+                <option value="image_unclear">Hình ảnh sản phẩm không rõ nét / không hợp lệ</option>
+                <option value="wrong_category">Đăng sai thể loại sản phẩm</option>
+                <option value="incomplete_info">Thông tin mô tả không đầy đủ</option>
+                <option value="price_violation">Giá bán vi phạm chính sách sàn</option>
+                <option value="copyright">Nội dung vi phạm bản quyền</option>
+                <option value="prohibited">Mặt hàng không được phép kinh doanh</option>
+            </select>
+        </div>
+        <div class="field">
+            <label for="rejectNote">Ghi chú thêm (không bắt buộc)</label>
+            <textarea id="rejectNote" rows="3" placeholder="Bổ sung hướng dẫn để người bán chỉnh sửa lại..."></textarea>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-outline" onclick="closeModal('productRejectModal')">Quay lại</button>
+            <button class="btn btn-danger" onclick="confirmReject()"><span class="material-symbols-outlined" style="font-size:16px;">close</span> Xác nhận từ chối</button>
+        </div>
+    </div>
+</div>
+
+<!-- VISIBILITY (SHOW / HIDE) MODAL -->
+<div class="modal-backdrop" id="productVisibilityModal" style="display:none;">
+    <div class="modal-dialog" style="max-width:460px;">
+        <h3 class="modal-title" style="text-align:center;" id="visibilityModalTitle">Thay đổi hiển thị</h3>
+        <p class="modal-desc" style="text-align:center;" id="visibilityModalDesc"></p>
+        <div class="modal-actions">
+            <button class="btn btn-outline" onclick="closeModal('productVisibilityModal')">Quay lại</button>
+            <button class="btn btn-primary" id="visibilityConfirmBtn" onclick="confirmVisibility()">Xác nhận</button>
+        </div>
+    </div>
+</div>
+
+<!-- DELETE MODAL -->
+<div class="modal-backdrop" id="productDeleteModal" style="display:none;">
+    <div class="modal-dialog" style="max-width:460px;">
+        <h3 class="modal-title" style="text-align:center;">Xoá sản phẩm</h3>
+        <p class="modal-desc" style="text-align:center;" id="deleteModalDesc"></p>
+        <div class="modal-actions">
+            <button class="btn btn-outline" onclick="closeModal('productDeleteModal')">Quay lại</button>
+            <button class="btn btn-danger" onclick="confirmDelete()"><span class="material-symbols-outlined" style="font-size:16px;">delete</span> Xoá sản phẩm</button>
+        </div>
+    </div>
+</div>
+
+<!-- PRODUCT MODERATION POLICY MODAL -->
+<div class="modal-backdrop" id="productPolicyModal" style="display:none;">
+    <div class="modal-dialog" style="max-width:560px; text-align:left;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+            <h3 class="modal-title" style="margin:0;">Quy trình kiểm duyệt sản phẩm</h3>
+            <button onclick="closeModal('productPolicyModal')" style="background:none;border:none;font-size:22px;color:#94a3b8;cursor:pointer;">&times;</button>
+        </div>
+        <p class="modal-desc" style="text-align:left; margin-bottom:18px;">Áp dụng cho mọi bài đăng sản phẩm mới hoặc chỉnh sửa trên nền tảng.</p>
+        <div class="policy-step-list">
+            <div class="policy-step">
+                <div class="policy-step-num">1</div>
+                <div class="policy-step-text">
+                    <h5>Tiếp nhận bài đăng</h5>
+                    <p>Bài đăng mới hoặc sau chỉnh sửa được đưa vào hàng chờ ở trạng thái "Chờ duyệt", chưa hiển thị công khai.</p>
+                </div>
+            </div>
+            <div class="policy-step">
+                <div class="policy-step-num">2</div>
+                <div class="policy-step-text">
+                    <h5>Kiểm tra nội dung</h5>
+                    <p>Admin đối chiếu hình ảnh, mô tả, thể loại, giá và tình trạng sản phẩm với chính sách đăng bán của sàn.</p>
+                </div>
+            </div>
+            <div class="policy-step">
+                <div class="policy-step-num">3</div>
+                <div class="policy-step-text">
+                    <h5>Ra quyết định</h5>
+                    <p>Phê duyệt để hiển thị công khai, hoặc từ chối kèm lý do cụ thể để người bán chỉnh sửa và gửi lại.</p>
+                </div>
+            </div>
+            <div class="policy-step">
+                <div class="policy-step-num">4</div>
+                <div class="policy-step-text">
+                    <h5>Xử lý sau kiểm duyệt</h5>
+                    <p>Sản phẩm vi phạm đã đăng bán có thể bị ẩn khỏi sàn hoặc xoá mềm, kèm ghi nhận vào lịch sử xử lý.</p>
+                </div>
+            </div>
+            <div class="policy-step">
+                <div class="policy-step-num">5</div>
+                <div class="policy-step-text">
+                    <h5>Thông báo cho người bán</h5>
+                    <p>Người bán nhận thông báo về kết quả kiểm duyệt và lý do (nếu bị từ chối) để khắc phục.</p>
+                </div>
+            </div>
+        </div>
+        <div class="modal-actions" style="justify-content:flex-end; margin-top:20px;">
+            <button class="btn btn-primary" onclick="closeModal('productPolicyModal')">Đã hiểu</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+<script src="../js/common.js"></script>
+<script src="../js/products.js"></script>
+</body>
+</html>
