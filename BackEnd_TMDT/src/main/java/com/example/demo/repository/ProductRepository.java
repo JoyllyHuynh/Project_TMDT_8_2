@@ -24,6 +24,12 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     List<Product> findBySellerAndDeletedAtIsNullOrderByCreatedAtDesc(User seller);
 
+    long countByDeletedAtIsNull();
+
+    long countByModerationStatusAndDeletedAtIsNull(ModerationStatus moderationStatus);
+
+    long countByActiveAndDeletedAtIsNull(Boolean active);
+
     @Query("""
             SELECT p FROM Product p
             LEFT JOIN p.author author

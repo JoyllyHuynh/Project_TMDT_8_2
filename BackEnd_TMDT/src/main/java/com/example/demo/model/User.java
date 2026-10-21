@@ -51,6 +51,18 @@ public class User {
     @Column(name = "account_status", nullable = false, length = 20)
     private AccountStatus accountStatus = AccountStatus.ACTIVE;
 
+    @Column(name = "seller_requested_at")
+    private LocalDateTime sellerRequestedAt;
+
+    @Column(name = "seller_request_status", length = 20)
+    private String sellerRequestStatus;
+
+    @Column(name = "seller_request_note", columnDefinition = "TEXT")
+    private String sellerRequestNote;
+
+    @Column(name = "seller_request_resolved_at")
+    private LocalDateTime sellerRequestResolvedAt;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -61,4 +73,10 @@ public class User {
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+
+    @Column(name = "account_status_reason")
+    private String accountStatusReason;
+
+    @Column(name = "account_status_changed_at")
+    private LocalDateTime accountStatusChangedAt;
 }

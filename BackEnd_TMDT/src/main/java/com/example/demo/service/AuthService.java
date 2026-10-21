@@ -134,6 +134,20 @@ public class AuthService {
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy tài khoản."));
     }
 
+    /** Người dùng gửi yêu cầu trở thành người bán; Admin Console sẽ duyệt/từ chối. */
+    @Transactional
+    public User requestSellerRole(Long userId) {
+        User user = getCurrentUser(userId);
+        if (Boolean.TRUE.equals(user.getSeller())) {
+            throw ApiException.badRequest("Bạn đã có quyền người bán.");
+        }
+        if (user.getSellerRequestedAt() != null) {
+            throw ApiException.conflict("Yêu cầu đang chờ admin xét duyệt.");
+        }
+        user.setSellerRequestedAt(LocalDateTime.now());
+        return userRepository.save(user);
+    }
+
     @Transactional
     public User updateCurrentUser(Long userId, UpdateProfileRequest request) {
         User user = getCurrentUser(userId);

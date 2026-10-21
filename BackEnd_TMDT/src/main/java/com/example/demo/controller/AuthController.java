@@ -53,6 +53,14 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success("Mật khẩu đã được cập nhật.", null));
     }
 
+    @PostMapping("/me/seller-request")
+    public ResponseEntity<ApiResponse<UserResponse>> requestSellerRole() {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Đã gửi yêu cầu trở thành người bán, chờ admin xét duyệt.",
+                UserResponse.from(authService.requestSellerRole(SecurityUtils.currentUserId()))
+        ));
+    }
+
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<UserResponse>> currentUser() {
         return ResponseEntity.ok(ApiResponse.success(

@@ -1,5 +1,6 @@
 package com.example.demo.model;
 
+import com.example.demo.model.enums.DisputeFavor;
 import com.example.demo.model.enums.OrderPaymentStatus;
 import com.example.demo.model.enums.OrderStatus;
 import com.example.demo.model.enums.PaymentMethod;
@@ -85,6 +86,22 @@ public class Order {
 
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
+
+    @Column(name = "dispute_reason", columnDefinition = "TEXT")
+    private String disputeReason;
+
+    @Column(name = "disputed_at")
+    private LocalDateTime disputedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "dispute_favor", length = 10)
+    private DisputeFavor disputeFavor;
+
+    @Column(name = "dispute_note", columnDefinition = "TEXT")
+    private String disputeNote;
+
+    @Column(name = "dispute_resolved_at")
+    private LocalDateTime disputeResolvedAt;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

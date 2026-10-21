@@ -2,18 +2,19 @@ package com.example.demo.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
+import com.example.demo.config.ConditionalOnMailConfigured;
 
 import jakarta.mail.internet.MimeMessage;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
-@ConditionalOnProperty(name = "app.auth.password-reset.email-enabled", havingValue = "true")
+@Conditional(ConditionalOnMailConfigured.class)
 public class SmtpPasswordResetLinkNotifier implements PasswordResetLinkNotifier {
     
 
