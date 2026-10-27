@@ -32,7 +32,17 @@
                     <label class="check-label" for="remember"><input id="remember" name="remember" type="checkbox"> Ghi nhớ đăng nhập</label>
                     <a class="text-link" href="../forgot-password/forgot-password.html">Quên mật khẩu?</a>
                 </div>
-                <button class="auth-button" type="submit" data-submit>Đăng nhập</button>
+                <button class="auth-button" type="submit" data-submit>
+                    Đăng nhập
+                </button>
+
+                <div class="auth-divider">
+                    <span>Hoặc đăng nhập bằng</span>
+                </div>
+
+                <div id="google-signin-button"></div>
+                <p class="field-error" id="google-error" role="alert"></p>
+
             </form>
             <p class="auth-switch">Chưa có tài khoản? <a class="text-link" href="../register/register.html">Đăng ký ngay</a></p>
         </section>

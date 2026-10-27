@@ -4,6 +4,7 @@ import com.example.demo.dto.ApiResponse;
 import com.example.demo.dto.auth.AuthResponse;
 import com.example.demo.dto.auth.ForgotPasswordRequest;
 import com.example.demo.dto.auth.LoginRequest;
+import com.example.demo.dto.auth.GoogleLoginRequest;
 import com.example.demo.dto.auth.RegisterRequest;
 import com.example.demo.dto.auth.ResetPasswordRequest;
 import com.example.demo.dto.auth.UpdateProfileRequest;
@@ -36,6 +37,16 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(ApiResponse.success("Đăng nhập thành công", authService.login(request)));
+    }
+
+    @PostMapping("/google")
+    public ResponseEntity<ApiResponse<AuthResponse>> googleLogin(
+            @Valid @RequestBody GoogleLoginRequest request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Đăng nhập bằng Google thành công.",
+                authService.loginWithGoogle(request.getIdToken(), request.isRemember())
+        ));
     }
 
     @PostMapping("/forgot-password")

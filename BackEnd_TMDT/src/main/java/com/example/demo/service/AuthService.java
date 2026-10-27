@@ -15,9 +15,12 @@ import com.example.demo.model.enums.AccountStatus;
 import com.example.demo.repository.AuthSessionRepository;
 import com.example.demo.repository.PasswordResetTokenRepository;
 import com.example.demo.repository.UserRepository;
+import com.example.demo.security.GoogleIdentityTokenVerifier;
 import com.example.demo.security.JwtService;
+import com.example.demo.security.VerifiedGoogleIdentity;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -43,6 +46,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final PasswordResetLinkNotifier passwordResetLinkNotifier;
+    private final GoogleIdentityTokenVerifier googleIdentityTokenVerifier;
 
     @Value("${app.auth.password-reset.expiration-minutes:15}")
     private long resetTokenExpirationMinutes;
@@ -71,14 +75,77 @@ public class AuthService {
         if (user.getAccountStatus() != AccountStatus.ACTIVE) {
             throw ApiException.forbidden("Tài khoản đã bị khóa.");
         }
+        if (user.getPasswordHash() == null) {
+            throw ApiException.unauthorized("Thông tin đăng nhập chưa chính xác.");
+        }
 
         authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(
                 user.getEmail(),
                 request.getPassword()
         ));
 
-        String role = user.getRole().name();
-        String token = jwtService.generateToken(user.getId(), user.getEmail(), role, request.isRemember());
+        return createAuthResponse(user, request.isRemember());
+    }
+
+    @Transactional
+    public AuthResponse loginWithGoogle(String idToken, boolean remember) {
+        VerifiedGoogleIdentity identity = googleIdentityTokenVerifier.verify(idToken);
+        if (identity == null
+                || identity.subject() == null || identity.subject().isBlank()
+                || identity.email() == null || identity.email().isBlank()
+                || !identity.email().contains("@")
+                || !identity.emailVerified()) {
+            throw ApiException.unauthorized("Không thể xác minh tài khoản Google.");
+        }
+
+        User user = userRepository.findByGoogleSub(identity.subject())
+                .orElseGet(() -> findOrCreateGoogleUser(identity));
+        if (user.getDeletedAt() != null) {
+            throw ApiException.forbidden("Tài khoản đã bị xóa và không thể đăng nhập.");
+        }
+        if (user.getAccountStatus() != AccountStatus.ACTIVE) {
+            throw ApiException.forbidden("Tài khoản đã bị khóa.");
+        }
+
+        return createAuthResponse(user, remember);
+    }
+
+    private User findOrCreateGoogleUser(VerifiedGoogleIdentity identity) {
+        String email = identity.email().trim();
+        userRepository.findByEmailIgnoreCase(email).ifPresent(existingUser -> {
+            if (existingUser.getDeletedAt() != null) {
+                throw ApiException.conflict("Email này thuộc tài khoản đã bị xóa.");
+            }
+            throw ApiException.conflict(
+                    "Email này đã có tài khoản. Hãy đăng nhập bằng phương thức hiện tại."
+            );
+        });
+
+        User user = new User();
+        user.setGoogleSub(identity.subject());
+        user.setEmail(email);
+        String fullName = identity.name() == null || identity.name().isBlank()
+                ? email.substring(0, email.indexOf('@'))
+                : identity.name().trim();
+        user.setFullName(fullName.length() > 100 ? fullName.substring(0, 100) : fullName);
+        user.setAvatarUrl(identity.picture());
+
+        try {
+            return userRepository.saveAndFlush(user);
+        } catch (DataIntegrityViolationException exception) {
+            throw ApiException.conflict(
+                    "Tài khoản Google đã được tạo đồng thời. Vui lòng thử đăng nhập lại."
+            );
+        }
+    }
+
+    private AuthResponse createAuthResponse(User user, boolean remember) {
+        String token = jwtService.generateToken(
+                user.getId(),
+                user.getEmail(),
+                user.getRole().name(),
+                remember
+        );
 
         AuthSession authSession = new AuthSession();
         authSession.setUser(user);
