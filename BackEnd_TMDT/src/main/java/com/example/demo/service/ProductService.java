@@ -3,6 +3,7 @@ package com.example.demo.service;
 import com.example.demo.dto.product.PageResponse;
 import com.example.demo.dto.product.ProductRequest;
 import com.example.demo.dto.product.ProductResponse;
+import com.example.demo.dto.product.ProductVisibilityRequest;
 import com.example.demo.exception.ApiException;
 import com.example.demo.model.Product;
 import com.example.demo.model.ProductImage;
@@ -142,6 +143,23 @@ public class ProductService {
         verifyOwnerOrAdmin(product);
         product.setActive(false);
         product.setDeletedAt(LocalDateTime.now());
+    }
+
+    @Transactional
+    public ProductResponse updateVisibility(Long id, ProductVisibilityRequest request) {
+        if (request == null || request.active() == null) {
+            throw ApiException.badRequest("Trạng thái hiển thị không hợp lệ.");
+        }
+        Product product = productRepository.findByIdAndDeletedAtIsNull(id)
+                .orElseThrow(() -> ApiException.notFound("Không tìm thấy sản phẩm."));
+        verifyOwnerOrAdmin(product);
+        if (Boolean.TRUE.equals(request.active()) && product.getModerationStatus() != ModerationStatus.APPROVED) {
+            throw ApiException.badRequest("Chỉ có thể hiển thị sản phẩm đã được duyệt.");
+        }
+
+        product.setActive(request.active());
+        productRepository.save(product);
+        return toResponse(product);
     }
 
     private void applyRequest(Product product, ProductRequest request) {

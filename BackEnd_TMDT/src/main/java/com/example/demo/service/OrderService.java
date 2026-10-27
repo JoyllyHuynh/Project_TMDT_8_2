@@ -2,6 +2,7 @@ package com.example.demo.service;
 
 import com.example.demo.dto.order.CheckoutRequest;
 import com.example.demo.dto.order.OrderResponse;
+import com.example.demo.dto.chatbot.ChatbotOrderSummary;
 import com.example.demo.exception.ApiException;
 import com.example.demo.model.*;
 import com.example.demo.model.enums.OrderPaymentStatus;
@@ -115,5 +116,27 @@ public class OrderService {
                     return OrderResponse.from(order, items);
                 })
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<ChatbotOrderSummary> getChatbotOrderSummaries() {
+        UserPrincipal principal = SecurityUtils.currentUser();
+        return orderRepository.findTop5ByBuyerIdOrderByCreatedAtDesc(principal.getId())
+                .stream()
+                .map(order -> new ChatbotOrderSummary(
+                        order.getOrderCode(),
+                        order.getStatus().name(),
+                        order.getPaymentStatus().name(),
+                        order.getTotalAmount(),
+                        order.getCreatedAt(),
+                        orderItemRepository.findTop5ByOrderOrderByIdAsc(order).stream()
+                                .map(item -> new ChatbotOrderSummary.Item(
+                                        item.getProductTitle(),
+                                        item.getQuantity(),
+                                        item.getUnitPrice()
+                                ))
+                                .toList()
+                ))
+                .toList();
     }
 }

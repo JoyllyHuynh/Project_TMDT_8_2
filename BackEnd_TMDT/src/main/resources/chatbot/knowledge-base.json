@@ -1,0 +1,32 @@
+[
+  {
+    "question": "Tìm và xem truyện trong Chợ Mua Bán",
+    "keywords": ["tìm truyện", "tìm kiếm", "sản phẩm", "danh mục", "tác giả", "mua bán", "catalog"],
+    "answer": "Trang Chợ Mua Bán có ô tìm theo tên truyện hoặc tác giả và trang danh mục. Kết quả catalog công khai chỉ gồm sản phẩm đang hiển thị và đã được duyệt; chatbot có thể tra cứu tên, giá và tồn kho hiện tại từ catalog.",
+    "url": "/tin/html/home.html"
+  },
+  {
+    "question": "Đăng tin bán truyện",
+    "keywords": ["đăng bán", "đăng tin", "người bán", "seller", "tin đăng"],
+    "answer": "Kênh người bán cho phép gửi sản phẩm lên hệ thống. Tin mới hoặc tin được chỉnh sửa sẽ ở trạng thái chờ kiểm duyệt và chỉ xuất hiện trong catalog công khai sau khi được duyệt.",
+    "url": "/ttruongmap/dang-ban-truyen/index.html"
+  },
+  {
+    "question": "Tra cứu đơn hàng của tôi",
+    "keywords": ["đơn hàng của tôi", "tra cứu đơn", "trạng thái đơn", "order status"],
+    "answer": "Bạn cần đăng nhập bằng tài khoản đã đặt hàng. Chatbot chỉ có thể tra cứu tối đa 5 đơn gần nhất của chính tài khoản đó và chỉ hiển thị mã đơn, trạng thái, tổng tiền cùng các mặt hàng; không hiển thị địa chỉ hoặc số điện thoại.",
+    "url": "/vu/auth/login/login.html"
+  },
+  {
+    "question": "Vận chuyển, đổi trả và hoàn tiền",
+    "keywords": ["vận chuyển", "giao hàng", "ship", "đổi trả", "hoàn tiền", "refund", "hủy đơn", "khiếu nại"],
+    "answer": "Chatbot hiện chưa có nguồn chính thức đã xác minh về thời gian giao hàng, điều kiện đổi trả, hoàn tiền hoặc hủy đơn. Mình không thể xác nhận chính sách này; vui lòng gửi yêu cầu đến bộ phận hỗ trợ để được kiểm tra.",
+    "url": "/vu/request_support/request_support.html"
+  },
+  {
+    "question": "Liên hệ bộ phận hỗ trợ",
+    "keywords": ["hỗ trợ", "liên hệ", "support", "trợ giúp", "phản ánh"],
+    "answer": "Bạn có thể gửi yêu cầu qua trang Hỗ trợ. Không gửi mật khẩu, mã OTP, mã thanh toán hoặc thông tin thẻ trong nội dung yêu cầu.",
+    "url": "/vu/request_support/request_support.html"
+  }
+]

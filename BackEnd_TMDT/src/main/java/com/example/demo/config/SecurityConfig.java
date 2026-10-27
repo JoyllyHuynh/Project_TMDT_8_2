@@ -62,7 +62,8 @@ public class SecurityConfig {
                                 "/api/auth/login",
                                 "/api/auth/google",
                                 "/api/auth/forgot-password",
-                                "/api/auth/reset-password"
+                                "/api/auth/reset-password",
+                                "/api/chatbot/message"
                         ).permitAll()
                         .requestMatchers(HttpMethod.GET,
                                 "/api/products/mine"

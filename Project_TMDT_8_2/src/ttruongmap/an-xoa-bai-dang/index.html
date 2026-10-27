@@ -10,15 +10,6 @@
       border: 1px solid #fecaca;
       background: #fffafa;
     }
-    .reason-badge {
-      background: #fef3c7;
-      color: #92400e;
-      padding: 3px 8px;
-      border-radius: 4px;
-      font-size: 0.74rem;
-      display: inline-block;
-      margin-top: 4px;
-    }
   </style>
 </head>
 <body>
@@ -66,7 +57,7 @@
             <span class="material-symbols-outlined" style="color: var(--danger);">visibility_off</span>
             Quản Lý Ẩn & Xóa Bài Đăng
           </h1>
-          <p class="page-desc">Kiểm soát các bài đăng tạm ngưng hiển thị, xử lý lý do ẩn và xóa bài đăng không còn kinh doanh</p>
+          <p class="page-desc">Quản lý trạng thái hiển thị và gỡ các sản phẩm không còn kinh doanh</p>
         </div>
         <div class="topbar-right">
           <a href="../quan-ly-bai-dang/index.html" class="btn btn-secondary">
@@ -80,9 +71,9 @@
         <div class="stats-grid">
           <div class="stat-card">
             <div class="stat-info">
-              <span class="stat-label">Bài đăng đang ẩn</span>
+              <span class="stat-label">Bài chưa hiển thị công khai</span>
               <span class="stat-value" id="statHiddenCount" style="color: var(--warning);">0</span>
-              <span class="stat-trend">Tạm dừng tiếp cận người mua</span>
+              <span class="stat-trend">Đã ẩn hoặc chưa được duyệt</span>
             </div>
             <div class="stat-icon orange">
               <span class="material-symbols-outlined">visibility_off</span>
@@ -91,23 +82,23 @@
 
           <div class="stat-card">
             <div class="stat-info">
-              <span class="stat-label">Ẩn do thương lượng</span>
-              <span class="stat-value" id="statNegotiatingCount">0</span>
-              <span class="stat-trend up">Sắp hoàn tất giao dịch</span>
+              <span class="stat-label">Chờ kiểm duyệt</span>
+              <span class="stat-value" id="statPendingCount">0</span>
+              <span class="stat-trend">Chưa thể hiển thị công khai</span>
             </div>
             <div class="stat-icon purple">
-              <span class="material-symbols-outlined">handshake</span>
+              <span class="material-symbols-outlined">pending_actions</span>
             </div>
           </div>
 
           <div class="stat-card">
             <div class="stat-info">
-              <span class="stat-label">Tổng bài bị xóa</span>
-              <span class="stat-value" id="statDeletedCount">0</span>
-              <span class="stat-trend down">Đã dọn dẹp kho</span>
+              <span class="stat-label">Sản phẩm hết hàng</span>
+              <span class="stat-value" id="statOutOfStock">0</span>
+              <span class="stat-trend">Đang có số lượng tồn kho bằng 0</span>
             </div>
-            <div class="stat-icon red">
-              <span class="material-symbols-outlined">delete_sweep</span>
+            <div class="stat-icon orange">
+              <span class="material-symbols-outlined">inventory_2</span>
             </div>
           </div>
         </div>
@@ -115,11 +106,11 @@
         <!-- TABS -->
         <div class="card">
           <div class="filter-tabs">
-            <button class="filter-tab active" id="tabHiddenBtn" onclick="switchView('hidden')">
+            <button class="filter-tab active" id="tabHiddenBtn" type="button" data-view="hidden">
               <span class="material-symbols-outlined" style="font-size: 18px;">visibility_off</span>
-              Bài đăng đang ẩn (<span id="countHiddenTab">0</span>)
+              Bài chưa hiển thị công khai (<span id="countHiddenTab">0</span>)
             </button>
-            <button class="filter-tab" id="tabAllToHideBtn" onclick="switchView('all_to_hide')">
+            <button class="filter-tab" id="tabAllToHideBtn" type="button" data-view="all_to_hide">
               <span class="material-symbols-outlined" style="font-size: 18px;">archive</span>
               Chọn ẩn nhanh từ bài đang bán
             </button>
@@ -133,7 +124,7 @@
                   <tr>
                     <th style="width: 70px;">Ảnh</th>
                     <th>Tác phẩm truyện</th>
-                    <th>Lý do ẩn bài</th>
+                    <th>Trạng thái</th>
                     <th>Giá niêm yết</th>
                     <th>Tồn kho</th>
                     <th>Ngày đăng</th>
@@ -150,7 +141,7 @@
           <!-- TABLE FOR ACTIVE POSTS TO QUICK HIDE -->
           <div id="allToHideSection" style="display: none;">
             <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">
-              Bấm nút <strong>"Ẩn bài này"</strong> để tạm dừng hiển thị truyện ra ngoài sàn giao dịch:
+              Bấm nút <strong>"Ẩn bài này"</strong> để tạm dừng hiển thị sản phẩm đã được duyệt:
             </p>
             <div class="table-container">
               <table class="data-table">
@@ -181,8 +172,8 @@
             </h3>
           </div>
           <div style="font-size: 0.86rem; color: #7f1d1d; line-height: 1.6;">
-            • Khi <strong>Ẩn bài đăng</strong>: Dữ liệu và lịch sử đánh giá bài đăng vẫn được giữ nguyên vẹn. Bạn có thể khôi phục ("Bỏ ẩn") bất kỳ lúc nào.<br>
-            • Khi <strong>Xóa bài đăng</strong>: Bài đăng sẽ được xóa khỏi cơ sở dữ liệu của Seller và không thể tự động khôi phục. Các giao dịch trong quá khứ liên quan đến bài đăng này vẫn được lưu trữ tại lịch sử đơn hàng.
+            • Khi <strong>Ẩn bài đăng</strong>: Sản phẩm vẫn được giữ nguyên và có thể hiện lại nếu đã được duyệt.<br>
+            • Khi <strong>Gỡ bài đăng</strong>: API thực hiện xóa mềm; sản phẩm không còn trong danh sách seller, còn lịch sử đơn hàng được bảo toàn.
           </div>
         </div>
       </div>
@@ -195,9 +186,9 @@
       <div class="modal-header" style="border-bottom-color: #fee2e2;">
         <h3 class="modal-title" style="color: var(--danger);">
           <span class="material-symbols-outlined">warning</span>
-          Xác nhận xóa vĩnh viễn bài đăng
+        Xác nhận gỡ bài đăng
         </h3>
-        <button class="modal-close" onclick="closeModal('deleteConfirmModal')">&times;</button>
+        <button class="modal-close" type="button" data-close-modal>&times;</button>
       </div>
       <div class="modal-body">
         <input type="hidden" id="deleteTargetId">
@@ -205,211 +196,18 @@
           Bạn có chắc chắn muốn xóa bài đăng <strong id="deleteTargetTitle">...</strong>?
         </p>
         <p style="font-size: 0.82rem; color: var(--danger); background: #fef2f2; padding: 10px; border-radius: 6px;">
-          Cảnh báo: Hành động này không thể hoàn tác! Bài đăng sẽ bị xóa khỏi gian hàng của bạn ngay lập tức.
+          Bài đăng sẽ bị gỡ khỏi gian hàng. Lịch sử đơn hàng liên quan vẫn được giữ lại.
         </p>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeModal('deleteConfirmModal')">Hủy bỏ</button>
-        <button class="btn btn-danger" onclick="executeDeletePost()">Đồng ý xóa vĩnh viễn</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL EDIT REASON -->
-  <div class="modal-backdrop" id="editReasonModal">
-    <div class="modal-box" style="max-width: 460px;">
-      <div class="modal-header">
-        <h3 class="modal-title">Cập nhật lý do ẩn bài</h3>
-        <button class="modal-close" onclick="closeModal('editReasonModal')">&times;</button>
-      </div>
-      <div class="modal-body">
-        <input type="hidden" id="editReasonTargetId">
-        <div class="form-group">
-          <label class="form-label">Chọn hoặc nhập lý do mới:</label>
-          <input type="text" id="newReasonInput" class="form-input" placeholder="Nhập lý do ẩn...">
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeModal('editReasonModal')">Hủy</button>
-        <button class="btn btn-primary" onclick="saveNewReason()">Cập nhật</button>
+        <button class="btn btn-secondary" type="button" data-close-modal>Hủy bỏ</button>
+        <button class="btn btn-danger" type="button" id="confirmDeleteButton">Gỡ bài đăng</button>
       </div>
     </div>
   </div>
 
   <script src="../../truong/js/common.js"></script>
-  <script src="../js/shared.js"></script>
-  <script>
-    let activeView = 'hidden';
-
-    function switchView(view) {
-      activeView = view;
-      if (view === 'hidden') {
-        document.getElementById('hiddenPostsSection').style.display = 'block';
-        document.getElementById('allToHideSection').style.display = 'none';
-        document.getElementById('tabHiddenBtn').classList.add('active');
-        document.getElementById('tabAllToHideBtn').classList.remove('active');
-      } else {
-        document.getElementById('hiddenPostsSection').style.display = 'none';
-        document.getElementById('allToHideSection').style.display = 'block';
-        document.getElementById('tabHiddenBtn').classList.remove('active');
-        document.getElementById('tabAllToHideBtn').classList.add('active');
-      }
-      renderView();
-    }
-
-    function renderView() {
-      const posts = DataStore.getPosts();
-      const hiddenPosts = posts.filter(p => p.status === 'hidden');
-      const activePosts = posts.filter(p => p.status === 'active');
-
-      // Update stats
-      document.getElementById('statHiddenCount').innerText = hiddenPosts.length;
-      document.getElementById('countHiddenTab').innerText = hiddenPosts.length;
-      document.getElementById('sidebarHiddenBadge').innerText = hiddenPosts.length;
-      
-      const negotiating = hiddenPosts.filter(p => (p.hideReason || '').toLowerCase().includes('thương lượng')).length;
-      document.getElementById('statNegotiatingCount').innerText = negotiating;
-
-      const deletedCount = parseInt(localStorage.getItem('BOOKMOOCH_SELLER_DELETED_COUNT') || '0', 10);
-      document.getElementById('statDeletedCount').innerText = deletedCount;
-
-      // Render hidden posts table
-      const hiddenTbody = document.getElementById('hiddenTableBody');
-      if (hiddenPosts.length === 0) {
-        hiddenTbody.innerHTML = `
-          <tr>
-            <td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted);">
-              <span class="material-symbols-outlined" style="font-size: 36px; display: block; margin-bottom: 6px; color: var(--success);">check_circle</span>
-              Hiện không có bài đăng nào đang bị ẩn. Tất cả các bài của bạn đều đang hoạt động tốt!
-            </td>
-          </tr>
-        `;
-      } else {
-        hiddenTbody.innerHTML = hiddenPosts.map(post => `
-          <tr>
-            <td>
-              <img src="${post.image}" alt="Bìa" class="table-thumb" onerror="this.src='https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=300'">
-            </td>
-            <td>
-              <div class="manga-title-link">${post.title}</div>
-              <div class="manga-sub">Mã: <strong>${post.id}</strong> • ${post.author}</div>
-            </td>
-            <td>
-              <span class="reason-badge">
-                <span class="material-symbols-outlined" style="font-size: 13px;">info</span>
-                ${post.hideReason || 'Người bán tự ẩn'}
-              </span>
-              <button class="btn btn-secondary btn-sm" style="padding: 2px 6px; margin-left: 4px; font-size: 0.7rem;" onclick="openEditReasonModal('${post.id}', '${post.hideReason || ''}')">Sửa</button>
-            </td>
-            <td><strong style="color: var(--primary);">${formatVND(post.price)}</strong></td>
-            <td>${post.stock} cuốn</td>
-            <td><span style="font-size: 0.8rem; color: var(--text-muted);">${post.createdAt}</span></td>
-            <td style="text-align: right;">
-              <button class="btn btn-success btn-sm" onclick="restorePost('${post.id}')" title="Hiển thị lại bài đăng">
-                <span class="material-symbols-outlined" style="font-size: 16px;">visibility</span> Hiển thị lại
-              </button>
-              <button class="btn btn-outline-danger btn-sm" onclick="openDeleteModal('${post.id}', '${post.title}')" title="Xóa bài đăng vĩnh viễn">
-                <span class="material-symbols-outlined" style="font-size: 16px;">delete</span> Xóa
-              </button>
-            </td>
-          </tr>
-        `).join('');
-      }
-
-      // Render active posts table for quick hiding
-      const activeTbody = document.getElementById('activeToHideTableBody');
-      activeTbody.innerHTML = activePosts.map(post => `
-        <tr>
-          <td><img src="${post.image}" alt="Bìa" class="table-thumb"></td>
-          <td>
-            <div class="manga-title-link">${post.title}</div>
-            <div class="manga-sub">Mã: ${post.id}</div>
-          </td>
-          <td><strong>${formatVND(post.price)}</strong></td>
-          <td>${post.stock} cuốn</td>
-          <td><span class="badge badge-success">Đang bán</span></td>
-          <td style="text-align: right;">
-            <button class="btn btn-secondary btn-sm" onclick="quickHidePost('${post.id}')">
-              <span class="material-symbols-outlined" style="font-size: 16px;">visibility_off</span> Ẩn bài này
-            </button>
-          </td>
-        </tr>
-      `).join('');
-    }
-
-    function restorePost(id) {
-      const posts = DataStore.getPosts();
-      const target = posts.find(p => p.id === id);
-      if (target) {
-        target.status = 'active';
-        target.hideReason = '';
-        DataStore.savePosts(posts);
-        showToast(`Đã khôi phục hiển thị cho bài "${target.title}"!`, 'success');
-        renderView();
-      }
-    }
-
-    function quickHidePost(id) {
-      const posts = DataStore.getPosts();
-      const target = posts.find(p => p.id === id);
-      if (target) {
-        target.status = 'hidden';
-        target.hideReason = 'Tạm dừng để kiểm tra kho';
-        DataStore.savePosts(posts);
-        showToast(`Đã ẩn bài "${target.title}"!`, 'info');
-        renderView();
-      }
-    }
-
-    function openEditReasonModal(id, currentReason) {
-      document.getElementById('editReasonTargetId').value = id;
-      document.getElementById('newReasonInput').value = currentReason;
-      document.getElementById('editReasonModal').classList.add('show');
-    }
-
-    function saveNewReason() {
-      const id = document.getElementById('editReasonTargetId').value;
-      const reason = document.getElementById('newReasonInput').value.trim();
-      const posts = DataStore.getPosts();
-      const target = posts.find(p => p.id === id);
-      if (target) {
-        target.hideReason = reason || 'Người bán tự ẩn';
-        DataStore.savePosts(posts);
-        showToast('Đã cập nhật lý do ẩn thành công!', 'success');
-        closeModal('editReasonModal');
-        renderView();
-      }
-    }
-
-    function openDeleteModal(id, title) {
-      document.getElementById('deleteTargetId').value = id;
-      document.getElementById('deleteTargetTitle').innerText = title;
-      document.getElementById('deleteConfirmModal').classList.add('show');
-    }
-
-    function executeDeletePost() {
-      const id = document.getElementById('deleteTargetId').value;
-      let posts = DataStore.getPosts();
-      posts = posts.filter(p => p.id !== id);
-      DataStore.savePosts(posts);
-
-      // Increment deleted count metric
-      const deletedCount = parseInt(localStorage.getItem('BOOKMOOCH_SELLER_DELETED_COUNT') || '0', 10) + 1;
-      localStorage.setItem('BOOKMOOCH_SELLER_DELETED_COUNT', String(deletedCount));
-
-      closeModal('deleteConfirmModal');
-      showToast('Đã xóa vĩnh viễn bài đăng khỏi hệ thống!', 'info');
-      renderView();
-    }
-
-    function closeModal(id) {
-      document.getElementById(id).classList.remove('show');
-    }
-
-    document.addEventListener('DOMContentLoaded', () => {
-      renderView();
-    });
-  </script>
+  <script type="module" src="../js/catalog-visibility.js"></script>
+<script type="module" src="../../shared/chatbot/chatbot.js"></script>
 </body>
 </html>
-

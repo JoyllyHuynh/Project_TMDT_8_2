@@ -4,6 +4,7 @@ import com.example.demo.dto.ApiResponse;
 import com.example.demo.dto.product.PageResponse;
 import com.example.demo.dto.product.ProductRequest;
 import com.example.demo.dto.product.ProductResponse;
+import com.example.demo.dto.product.ProductVisibilityRequest;
 import com.example.demo.model.enums.ListingType;
 import com.example.demo.service.ProductService;
 import jakarta.validation.Valid;
@@ -111,6 +112,17 @@ public class ProductController {
     @GetMapping("/mine")
     public ResponseEntity<ApiResponse<List<ProductResponse>>> getMyProducts() {
         return ResponseEntity.ok(ApiResponse.success(productService.getMyProducts()));
+    }
+
+    @PatchMapping("/{id}/visibility")
+    public ResponseEntity<ApiResponse<ProductResponse>> updateMyProductVisibility(
+            @PathVariable Long id,
+            @Valid @RequestBody ProductVisibilityRequest request
+    ) {
+        String message = Boolean.TRUE.equals(request.active())
+                ? "Đã hiển thị sản phẩm."
+                : "Đã ẩn sản phẩm.";
+        return ResponseEntity.ok(ApiResponse.success(message, productService.updateVisibility(id, request)));
     }
 
     @PostMapping

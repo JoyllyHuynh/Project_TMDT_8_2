@@ -18,6 +18,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     List<Order> findByBuyerOrderByCreatedAtDesc(User buyer);
     List<Order> findByBuyerIdOrderByCreatedAtDesc(Long buyerId);
+    List<Order> findTop5ByBuyerIdOrderByCreatedAtDesc(Long buyerId);
 
     List<Order> findBySellerOrderByCreatedAtDesc(User seller);
 
