@@ -8,8 +8,8 @@ import org.springframework.stereotype.Component;
 public class ChatbotProperties {
 
     private String apiKey = "";
-    private String baseUrl = "https://api.openai.com/v1";
-    private String model = "gpt-4o-mini";
+    private String baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai";
+    private String model = "gemini-3.5-flash-lite";
     private int timeoutSeconds = 15;
 
     public String getApiKey() {

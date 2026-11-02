@@ -1,27 +1,37 @@
 # ComicWorm chatbot
 
-The chatbot uses a configurable OpenAI-compatible Chat Completions endpoint. Its API key is read only by the backend and is never sent to the browser. With no key, the app still starts and the endpoint returns a clearly labeled FAQ/support fallback.
+The chatbot uses Gemini through Google's OpenAI-compatible Chat Completions endpoint. This keeps the current conversation and function-calling flow while using a Gemini model. The API key is read only by the backend and is never sent to the browser. Without a key, the app still starts and returns a clearly labeled FAQ/support fallback.
+
+## What it can do
+
+- Answer Vietnamese questions grounded in the verified FAQ knowledge base.
+- Search the public catalog, filter products, and return current prices and stock.
+- Show product details and available categories.
+- Look up up to five recent orders belonging to the authenticated user. It does not expose addresses, phone numbers, notes, payment credentials, or tokens.
+- Return relevant product cards and website links alongside its answer.
+
+The chatbot cannot modify carts or perform purchases, payments, or cancellations. Conversation history is held only in the open page's memory; no chatbot database tables or migrations are used. The widget warns users not to submit passwords, one-time codes, addresses, or payment details.
 
 ## Configuration
 
-Set these environment variables before starting the backend:
+Create a Gemini API key in Google AI Studio and set these environment variables before starting the backend:
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `CHATBOT_API_KEY` | For AI answers | Empty | Provider API key; keep it out of source control |
-| `CHATBOT_API_BASE_URL` | No | `https://api.openai.com/v1` | OpenAI-compatible API base URL |
-| `CHATBOT_MODEL` | No | `gpt-4o-mini` | Chat-completions model |
+| `GEMINI_API_KEY` | For AI answers | Empty | Gemini API key; keep it out of source control |
+| `CHATBOT_API_BASE_URL` | No | `https://generativelanguage.googleapis.com/v1beta/openai` | Gemini OpenAI-compatible API base URL |
+| `CHATBOT_MODEL` | No | `gemini-2.5-flash` | Gemini model |
 | `CHATBOT_TIMEOUT_SECONDS` | No | `15` | Request timeout, bounded to 1–30 seconds |
 
 PowerShell example:
 
 ```powershell
-$env:CHATBOT_API_KEY = "<provider-key>"
-$env:CHATBOT_MODEL = "gpt-4o-mini"
+$env:GEMINI_API_KEY = "<your-gemini-api-key>"
+$env:CHATBOT_MODEL = "gemini-2.5-flash"
 .\mvnw.cmd spring-boot:run
 ```
 
-The verified FAQ knowledge is maintained in `src/main/resources/chatbot/knowledge-base.json`. Add only facts that are confirmed in the current website or backend behavior; do not state unverified shipping, refund, or payment policies.
+The verified FAQ knowledge is maintained in `src/main/resources/chatbot/knowledge-base.json`. Add only facts confirmed in the current website or backend behavior; do not state unverified shipping, refund, or payment policies.
 
 ## API
 
@@ -34,9 +44,7 @@ The verified FAQ knowledge is maintained in `src/main/resources/chatbot/knowledg
 }
 ```
 
-The response follows the standard ComicWorm `ApiResponse` envelope. Its `data` contains `answer`, `mode` (`ai`, `unconfigured`, or `unavailable`), `requiresLogin`, public product cards, and verified site links. Product prices and stock are fetched from the public catalog service, which filters to active, approved, non-deleted products.
+The response follows the standard ComicWorm `ApiResponse` envelope. Its `data` contains `answer`, `mode` (`ai`, `unconfigured`, or `unavailable`), `requiresLogin`, public product cards, and verified site links. Product prices and stock come from the public catalog service, which filters to active, approved, non-deleted products.
 
-Order lookup is a read-only model tool with no user-ID argument. The backend derives the buyer from the authenticated JWT and returns at most five recent orders with a limited item summary; recipient, address, phone, notes, payment credentials, and tokens are excluded. There is no chatbot action for cart changes, purchases, payments, or cancellations.
-
-Conversation history exists only in the open page's memory. No chatbot tables, migrations, seeds, or database schema changes are required.
-Messages and the bounded tool results needed to answer them are sent to the configured AI provider. The widget warns users not to submit passwords, one-time codes, addresses, or payment details.
+Order lookup is a read-only model tool with no user-ID argument. The backend derives the buyer from the authenticated JWT and returns at most five recent orders with a limited item summary.
+Messages and bounded tool results needed to answer them are sent to Gemini.

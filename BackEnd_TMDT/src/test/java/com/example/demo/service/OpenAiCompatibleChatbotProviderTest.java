@@ -45,7 +45,7 @@ class OpenAiCompatibleChatbotProviderTest {
             assertEquals("Bearer local-test-key", authorization.get());
             assertFalse(requestBody.get().contains(authorization.get().substring("Bearer ".length())));
             var requestJson = new ObjectMapper().readTree(requestBody.get());
-            assertEquals("gpt-4o-mini", requestJson.path("model").asText());
+            assertEquals("gemini-2.5-flash", requestJson.path("model").asText());
             assertEquals("auto", requestJson.path("tool_choice").asText());
             assertEquals("function", requestJson.path("tools").path(0).path("type").asText());
             assertEquals("search_faq", completion.toolCalls().get(0).name());
@@ -156,13 +156,17 @@ class OpenAiCompatibleChatbotProviderTest {
 
     @Test
     void missingApiKeyDoesNotMakeARequestAndInvalidBaseUrlIsConfigurationError() {
-        ChatbotProperties missingKey = properties("https://api.openai.com/v1", "", 2);
+        ChatbotProperties missingKey = properties(
+                "https://generativelanguage.googleapis.com/v1beta/openai",
+                "",
+                2
+        );
         OpenAiCompatibleChatbotProvider unconfigured = new OpenAiCompatibleChatbotProvider(missingKey, new ObjectMapper());
         assertFalse(unconfigured.isConfigured());
         assertTrue(assertThrows(
                 ChatbotProviderException.class,
                 () -> unconfigured.complete(messages(), tools())
-        ).getSafeDiagnostic().contains("missing CHATBOT_API_KEY"));
+        ).getSafeDiagnostic().contains("missing GEMINI_API_KEY"));
 
         ChatbotProperties invalidUrl = properties("file:///tmp/provider", "local-test-key", 2);
         assertTrue(assertThrows(
@@ -198,7 +202,7 @@ class OpenAiCompatibleChatbotProviderTest {
         ChatbotProperties properties = new ChatbotProperties();
         properties.setApiKey(apiKey);
         properties.setBaseUrl(baseUrl);
-        properties.setModel("gpt-4o-mini");
+        properties.setModel("gemini-2.5-flash");
         properties.setTimeoutSeconds(timeoutSeconds);
         return properties;
     }

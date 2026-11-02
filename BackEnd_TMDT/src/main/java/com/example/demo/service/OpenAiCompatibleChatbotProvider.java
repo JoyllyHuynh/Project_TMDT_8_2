@@ -51,16 +51,20 @@ public class OpenAiCompatibleChatbotProvider implements ChatbotAiProvider {
         if (!isConfigured()) {
             throw new ChatbotProviderException(
                     "Chatbot provider is not configured.",
-                    "configuration: missing CHATBOT_API_KEY"
+                    "configuration: missing GEMINI_API_KEY"
             );
         }
 
         int timeoutSeconds = Math.max(1, Math.min(30, properties.getTimeoutSeconds()));
         URI endpoint = resolveEndpoint();
+        System.out.println("Chatbot endpoint: " + endpoint);
+        System.out.println("Chatbot model: " + properties.getModel());
         String serializedRequest = serializeRequest(messages, tools);
         HttpClient client = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(timeoutSeconds))
                 .build();
+        long startTime = System.nanoTime();
+
         try {
             HttpRequest request = HttpRequest.newBuilder(endpoint)
                     .timeout(Duration.ofSeconds(timeoutSeconds))
@@ -68,30 +72,54 @@ public class OpenAiCompatibleChatbotProvider implements ChatbotAiProvider {
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(serializedRequest))
                     .build();
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            HttpResponse<String> response = client.send(
+                    request,
+                    HttpResponse.BodyHandlers.ofString()
+            );
+
+            long elapsedMs = Duration.ofNanos(
+                    System.nanoTime() - startTime
+            ).toMillis();
+
+            System.out.println("Chatbot API response time: " + elapsedMs + " ms");
+            System.out.println("Chatbot API HTTP status: " + response.statusCode());
+
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw providerHttpException(response.statusCode(), response.body());
             }
+
             return parseCompletion(response.body());
+
         } catch (HttpTimeoutException exception) {
+            long elapsedMs = Duration.ofNanos(
+                    System.nanoTime() - startTime
+            ).toMillis();
+
+            System.err.println("Chatbot API timeout after " + elapsedMs + " ms");
+
             throw new ChatbotProviderException(
                     "Chatbot provider request timed out.",
                     "timeout: provider did not respond within the configured timeout",
                     exception
             );
+
         } catch (ConnectException | UnknownHostException exception) {
             throw new ChatbotProviderException(
                     "Could not connect to chatbot provider.",
                     "connection: provider host could not be reached",
                     exception
             );
+
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
+
             throw new ChatbotProviderException(
                     "Chatbot provider request was interrupted.",
                     "interrupted: provider request was interrupted",
                     exception
             );
+
         } catch (IOException exception) {
             throw new ChatbotProviderException(
                     "Chatbot provider request failed.",
@@ -103,7 +131,7 @@ public class OpenAiCompatibleChatbotProvider implements ChatbotAiProvider {
 
     private URI resolveEndpoint() {
         String baseUrl = properties.getBaseUrl() == null || properties.getBaseUrl().isBlank()
-                ? "https://api.openai.com/v1"
+                ? "https://generativelanguage.googleapis.com/v1beta/openai"
                 : properties.getBaseUrl().trim();
         try {
             URI base = URI.create(baseUrl);
@@ -154,10 +182,16 @@ public class OpenAiCompatibleChatbotProvider implements ChatbotAiProvider {
 
     private ChatbotProviderException providerHttpException(int status, String body) {
         ProviderError error = readProviderError(body);
+
+        String message = error.message();
+        if (message == null || message.isBlank()) {
+            message = sanitizeProviderMessage(body);
+        }
+
         String diagnostic = "http " + status
                 + " (code=" + error.code()
                 + ", type=" + error.type()
-                + "): " + safeProviderMessage(status, error.message());
+                + "): " + safeProviderMessage(status, message);
         return new ChatbotProviderException(
                 "Chatbot provider returned HTTP " + status + ".",
                 diagnostic
@@ -202,7 +236,7 @@ public class OpenAiCompatibleChatbotProvider implements ChatbotAiProvider {
             return providerMessage;
         }
         return switch (status) {
-            case 401 -> "authentication failed; verify CHATBOT_API_KEY";
+            case 401 -> "authentication failed; verify GEMINI_API_KEY";
             case 403 -> "provider denied access; verify account permissions";
             case 404 -> "provider endpoint or configured model was not found";
             case 429 -> "provider rate limit or usage quota was reached";
