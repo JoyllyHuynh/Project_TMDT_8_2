@@ -74,8 +74,7 @@ public class AuthService {
 
         authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(
                 user.getEmail(),
-                request.getPassword()
-        ));
+                request.getPassword()));
 
         String role = user.getRole().name();
         String token = jwtService.generateToken(user.getId(), user.getEmail(), role, request.isRemember());
@@ -85,8 +84,7 @@ public class AuthService {
         authSession.setTokenHash(jwtService.sha256(token));
         authSession.setExpiresAt(LocalDateTime.ofInstant(
                 jwtService.expiryFromToken(token),
-                ZoneId.systemDefault()
-        ));
+                ZoneId.systemDefault()));
         authSessionRepository.save(authSession);
 
         return new AuthResponse(token, UserResponse.from(user));
@@ -96,20 +94,49 @@ public class AuthService {
     public void requestPasswordReset(ForgotPasswordRequest request) {
         userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(request.getEmail().trim())
                 .ifPresent(user -> {
+                    LocalDateTime now = LocalDateTime.now();
+
+                    // Vô hiệu hóa tất cả link đặt lại mật khẩu cũ chưa sử dụng
+                    passwordResetTokenRepository.invalidateUnusedTokens(user.getId(), now);
+
+                    // Tạo token mới
                     byte[] randomBytes = new byte[RESET_TOKEN_BYTES];
                     SECURE_RANDOM.nextBytes(randomBytes);
-                    String token = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
+                    String token = Base64.getUrlEncoder()
+                            .withoutPadding()
+                            .encodeToString(randomBytes);
 
                     PasswordResetToken resetToken = new PasswordResetToken();
                     resetToken.setUser(user);
                     resetToken.setTokenHash(jwtService.sha256(token));
-                    resetToken.setExpiresAt(LocalDateTime.now().plusMinutes(resetTokenExpirationMinutes));
+
+                    // Link có hiệu lực trong 15 phút
+                    resetToken.setExpiresAt(now.plusMinutes(resetTokenExpirationMinutes));
+
                     passwordResetTokenRepository.save(resetToken);
 
                     String separator = passwordResetFrontendUrl.contains("?") ? "&" : "?";
                     String resetUrl = passwordResetFrontendUrl + separator + "token=" + token;
-                    passwordResetLinkNotifier.sendResetLink(user.getId(), user.getEmail(), resetUrl);
+
+                    passwordResetLinkNotifier.sendResetLink(
+                            user.getId(),
+                            user.getEmail(),
+                            resetUrl);
                 });
+    }
+
+    @Transactional(readOnly = true)
+    public void validateResetToken(String token) {
+        PasswordResetToken resetToken = passwordResetTokenRepository
+                .findByTokenHash(jwtService.sha256(token))
+                .orElseThrow(() -> ApiException.badRequest(
+                        "Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn."));
+
+        if (resetToken.getUsedAt() != null
+                || !resetToken.getExpiresAt().isAfter(LocalDateTime.now())) {
+            throw ApiException.badRequest(
+                    "Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.");
+        }
     }
 
     @Transactional

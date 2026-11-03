@@ -114,9 +114,110 @@ async function loadProduct() {
 
         const detailSection = document.querySelector(".comic-detail-section");
         detailSection?.setAttribute("data-product-id", String(product.id));
+        // Tải sản phẩm gợi ý dựa trên sản phẩm hiện tại
+        await loadRecommendations(product.id);
     } catch (error) {
         if (main) main.innerHTML = `<p role="alert">${escapeHtml(friendlyApiError(error))}</p>`;
     }
 }
+// Tải danh sách sản phẩm gợi ý
+async function loadRecommendations(productId) {
+    const container = document.querySelector("#relatedProducts");
 
+    if (!container) return;
+
+    container.innerHTML = "<p>Đang tải sản phẩm gợi ý...</p>";
+
+    try {
+        const result = await apiRequest(
+            `/api/products/${encodeURIComponent(productId)}/recommendations`
+        );
+
+        const products = result.data;
+
+        if (!Array.isArray(products) || products.length === 0) {
+            container.innerHTML = `
+                <p>Hiện chưa có sản phẩm gợi ý.</p>
+            `;
+            return;
+        }
+
+        container.innerHTML = products.map(product => {
+            const imageUrl = product.images?.length
+                ? product.images[0].imageUrl
+                : product.imageUrls?.[0];
+
+            const safeImageUrl = imageUrl &&
+                /^https?:\/\//i.test(imageUrl)
+                ? escapeHtml(imageUrl)
+                : "https://placehold.co/600x900/png?text=No+Image";
+
+            const productUrl = new URL(window.location.href);
+            productUrl.searchParams.set("id", product.id);
+
+            let listingBadge = "";
+
+            if (product.listingType === "SELL_AND_TRADE") {
+                listingBadge = `
+                    <span class="barter-badge">Bán & Đổi</span>
+                `;
+            } else if (product.listingType === "TRADE") {
+                listingBadge = `
+                    <span class="barter-badge">Trao đổi</span>
+                `;
+            } else {
+                listingBadge = `
+                    <span class="direct-sale-badge">Bán trực tiếp</span>
+                `;
+            }
+
+            return `
+                <article class="comic-card">
+                    <a href="${escapeHtml(productUrl.href)}">
+                        <div class="card-cover-wrap">
+                            <img
+                                src="${safeImageUrl}"
+                                alt="${escapeHtml(product.title)}"
+                                loading="lazy"
+                            >
+
+                            <span class="condition-tag">
+                                ${escapeHtml(conditionText(product.conditionPercent))}
+                            </span>
+                        </div>
+                    </a>
+
+                    <div class="card-body">
+                        <span class="card-category">
+                            ${escapeHtml(product.categoryName || "Chưa phân loại")}
+                        </span>
+
+                        <a href="${escapeHtml(productUrl.href)}">
+                            <h3 class="card-title">
+                                ${escapeHtml(product.title)}
+                            </h3>
+                        </a>
+
+                        <div class="card-footer">
+                            <span class="card-price">
+                                ${formatVnd(product.price)}
+                            </span>
+
+                            <span class="card-meta">
+                                ${listingBadge}
+                            </span>
+                        </div>
+                    </div>
+                </article>
+            `;
+        }).join("");
+
+    } catch (error) {
+        console.error("Lỗi tải sản phẩm gợi ý:", error);
+
+        container.innerHTML = `
+            <p>Không thể tải sản phẩm gợi ý. Vui lòng thử lại.</p>
+        `;
+    }
+}
 document.addEventListener("DOMContentLoaded", loadProduct);

@@ -27,10 +27,19 @@ public class ProductController {
 
     private final ProductService productService;
 
+        @GetMapping("/{id}/recommendations")
+    public ResponseEntity<ApiResponse<List<ProductResponse>>> getRecommendations(
+            @PathVariable Long id) {
+        return ResponseEntity.ok(
+                ApiResponse.success(productService.getRecommendations(id)));
+    }
+
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<ProductResponse>>> getProducts(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Integer categoryId,
+            @RequestParam(required = false) Integer publisherId,
+            @RequestParam(required = false) String conditionType,
             @RequestParam(required = false) BigDecimal minPrice,
             @RequestParam(required = false) BigDecimal maxPrice,
             @RequestParam(required = false) @Min(0) @Max(100) Integer minCondition,
@@ -41,11 +50,12 @@ public class ProductController {
             @RequestParam(defaultValue = "12") @Min(1) @Max(100) Integer pageSize,
             @RequestParam(required = false) String sortBy,
             @RequestParam(defaultValue = "newest") String sort,
-            @RequestParam(defaultValue = "desc") String direction
-    ) {
+            @RequestParam(defaultValue = "desc") String direction) {
         return ResponseEntity.ok(ApiResponse.success(productService.getProducts(
                 keyword,
                 categoryId,
+                publisherId,
+                conditionType,
                 minPrice,
                 maxPrice,
                 minCondition,
@@ -55,14 +65,15 @@ public class ProductController {
                 page,
                 pageSize,
                 sortBy != null ? sortBy : sort,
-                direction
-        )));
+                direction)));
     }
 
     @GetMapping("/search")
     public ResponseEntity<ApiResponse<PageResponse<ProductResponse>>> searchProducts(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Integer categoryId,
+            @RequestParam(required = false) Integer publisherId,
+            @RequestParam(required = false) String conditionType,
             @RequestParam(required = false) BigDecimal minPrice,
             @RequestParam(required = false) BigDecimal maxPrice,
             @RequestParam(required = false) @Min(0) @Max(100) Integer minCondition,
@@ -73,18 +84,31 @@ public class ProductController {
             @RequestParam(defaultValue = "12") @Min(1) @Max(100) Integer pageSize,
             @RequestParam(required = false) String sortBy,
             @RequestParam(defaultValue = "newest") String sort,
-            @RequestParam(defaultValue = "desc") String direction
-    ) {
+            @RequestParam(defaultValue = "desc") String direction) {
         return getProducts(
-                keyword, categoryId, minPrice, maxPrice, minCondition, maxCondition, seller,
-                listingType, page, pageSize, sortBy, sort, direction
-        );
+                keyword,
+                categoryId,
+                publisherId,
+                conditionType,
+                minPrice,
+                maxPrice,
+                minCondition,
+                maxCondition,
+                seller,
+                listingType,
+                page,
+                pageSize,
+                sortBy,
+                sort,
+                direction);
     }
 
     @GetMapping("/category/{categoryId}")
     public ResponseEntity<ApiResponse<PageResponse<ProductResponse>>> getProductsByCategory(
             @PathVariable Integer categoryId,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Integer publisherId,
+            @RequestParam(required = false) String conditionType,
             @RequestParam(required = false) BigDecimal minPrice,
             @RequestParam(required = false) BigDecimal maxPrice,
             @RequestParam(required = false) @Min(0) @Max(100) Integer minCondition,
@@ -95,12 +119,11 @@ public class ProductController {
             @RequestParam(defaultValue = "12") @Min(1) @Max(100) Integer pageSize,
             @RequestParam(required = false) String sortBy,
             @RequestParam(defaultValue = "newest") String sort,
-            @RequestParam(defaultValue = "desc") String direction
-    ) {
+            @RequestParam(defaultValue = "desc") String direction) {
         return getProducts(
-                keyword, categoryId, minPrice, maxPrice, minCondition, maxCondition, seller,
-                listingType, page, pageSize, sortBy, sort, direction
-        );
+                keyword, categoryId, publisherId,
+                conditionType, minPrice, maxPrice, minCondition, maxCondition, seller,
+                listingType, page, pageSize, sortBy, sort, direction);
     }
 
     @GetMapping("/{id}")
@@ -122,12 +145,10 @@ public class ProductController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<ProductResponse>> updateProduct(
             @PathVariable Long id,
-            @Valid @RequestBody ProductRequest request
-    ) {
+            @Valid @RequestBody ProductRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
                 "Sản phẩm đã được cập nhật và gửi kiểm duyệt.",
-                productService.updateProduct(id, request)
-        ));
+                productService.updateProduct(id, request)));
     }
 
     @DeleteMapping("/{id}")
