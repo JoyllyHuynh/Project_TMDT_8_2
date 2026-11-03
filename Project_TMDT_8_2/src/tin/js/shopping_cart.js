@@ -65,7 +65,12 @@ document.addEventListener('DOMContentLoaded', () => {
       line-height: 1.4;
     `;
 
-        toast.innerHTML = `<i class="fa-solid ${icon}" style="font-size: 16px;"></i> <span>${message}</span>`;
+        const toastIcon = document.createElement('i');
+        toastIcon.className = `fa-solid ${icon}`;
+        toastIcon.style.fontSize = '16px';
+        const toastMessage = document.createElement('span');
+        toastMessage.textContent = message;
+        toast.append(toastIcon, toastMessage);
         container.appendChild(toast);
 
         requestAnimationFrame(() => {
@@ -95,23 +100,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // --------------------------------------------------------------------------
     // 2. KHỞI TẠO STATE & KHAI BÁO PHẦN TỬ GIAO DIỆN CHÍNH
     // --------------------------------------------------------------------------
-    let currentDiscount = 0;
-    let activeVoucherCode = '';
-
     const selectAllCheckbox = document.querySelector('input[type="checkbox"][aria-label*="Chọn tất cả"], .custom-checkbox-label input, div.bg-white input[type="checkbox"]');
     const bulkDeleteBtn = document.querySelector('.btn-bulk-delete, button.text-slate-500');
     const clearCartBtn = document.querySelector('.btn-clear-cart, button.text-slate-400');
-    const voucherInput = document.querySelector('.voucher-input, input[placeholder*="OTAKU50K"]');
+    const voucherInput = document.querySelector('.voucher-input');
     const voucherApplyBtn = document.querySelector('.btn-apply-voucher, button.bg-slate-900');
     const checkoutBtn = document.querySelector('.btn-proceed-checkout, button.w-full');
-
-    // Danh sách Voucher hợp lệ trên hệ thống
-    const validVouchers = {
-        'OTAKU50K': { discount: 50000, desc: 'Giảm 50.000₫ đơn từ 500k' },
-        'COMICFREE': { discount: 35000, desc: 'Miễn phí ship SafeShip 35k' },
-        'MANGA100K': { discount: 100000, desc: 'Giảm 100.000₫ cho boxset' },
-        'BARTERSAFE': { discount: 40000, desc: 'Miễn phí bảo hiểm ký quỹ Escrow' }
-    };
 
     // --------------------------------------------------------------------------
     // 3. TÍNH TOÁN TỔNG TIỀN GIỎ HÀNG THỜI GIAN THỰC (LIVE RE-CALCULATION)
@@ -154,8 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalSelected = selectedItemCount + selectedBarterCount;
         const shippingFee = totalSelected > 0 ? 35000 : 0;
         const totalOrderValue = subtotalDirectBuy + barterCompensationTotal;
-        const finalDiscount = Math.min(currentDiscount, totalOrderValue);
-        const grandTotal = Math.max(0, totalOrderValue + shippingFee - finalDiscount);
+        const grandTotal = totalOrderValue + shippingFee;
 
         // Cập nhật hiển thị UI Tóm tắt đơn hàng
         const subtotalDisplay = document.querySelector('.summary-subtotal-val, span#summary-subtotal');
@@ -166,7 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (subtotalDisplay) subtotalDisplay.textContent = formatMoney(subtotalDirectBuy);
         if (barterDisplay) barterDisplay.textContent = formatMoney(barterCompensationTotal);
-        if (discountDisplay) discountDisplay.textContent = finalDiscount > 0 ? `-${formatMoney(finalDiscount)}` : '-0₫';
+        if (discountDisplay) discountDisplay.textContent = 'Chưa xác thực';
         if (grandTotalDisplay) grandTotalDisplay.textContent = formatMoney(grandTotal);
 
         if (selectAllLabel) {
@@ -488,39 +481,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // --------------------------------------------------------------------------
     // 6. NHẬP VOUCHER & ÁP DỤNG MÃ
     // --------------------------------------------------------------------------
-    const renderVoucherChip = (code, desc) => {
-        let chipArea = document.querySelector('.applied-coupons-list, #applied-voucher-container');
-        if (!chipArea) {
-            const voucherBox = document.querySelector('.voucher-box-card, div.bg-white.p-4.rounded-2xl:has(input)');
-            if (voucherBox) {
-                chipArea = document.createElement('div');
-                chipArea.id = 'applied-voucher-container';
-                chipArea.className = 'applied-coupons-list mt-3 flex flex-wrap gap-2';
-                voucherBox.appendChild(chipArea);
-            }
-        }
-
-        if (chipArea) {
-            chipArea.innerHTML = `
-        <div class="inline-flex items-center gap-1.5 bg-[#FFF7ED] border border-[#FED7AA] text-[#F97316] text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
-          <i class="fa-solid fa-tag"></i>
-          <span>${code}</span>
-          <span class="text-slate-500 font-normal text-[11px]">(-${formatMoney(currentDiscount)})</span>
-          <button type="button" class="btn-remove-code ml-1 text-slate-400 hover:text-red-500 cursor-pointer text-xs">&times;</button>
-        </div>
-      `;
-
-            chipArea.querySelector('.btn-remove-code').addEventListener('click', () => {
-                currentDiscount = 0;
-                activeVoucherCode = '';
-                chipArea.innerHTML = '';
-                if (voucherInput) voucherInput.value = '';
-                recalculateCart();
-                showToast('Đã gỡ mã giảm giá', 'info', 'fa-xmark');
-            });
-        }
-    };
-
     const applyVoucher = (code) => {
         const cleanCode = code.trim().toUpperCase();
         if (!cleanCode) {
@@ -528,18 +488,11 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        if (validVouchers[cleanCode]) {
-            const v = validVouchers[cleanCode];
-            currentDiscount = v.discount;
-            activeVoucherCode = cleanCode;
-
-            if (voucherInput) voucherInput.value = cleanCode;
-            renderVoucherChip(cleanCode, v.desc);
-            recalculateCart();
-            showToast(`Áp dụng mã "${cleanCode}" thành công! (${v.desc})`, 'success', 'fa-ticket');
-        } else {
-            showToast(`Mã "${cleanCode}" không hợp lệ hoặc đã hết lượt dùng!`, 'danger', 'fa-circle-exclamation');
-        }
+        showToast(
+            `Mã "${cleanCode}" chưa được xác thực. Giỏ hàng nhiều sản phẩm hiện chưa có API báo giá; voucher chỉ áp dụng trong checkout Buy Now.`,
+            'warning',
+            'fa-circle-exclamation'
+        );
     };
 
     if (voucherApplyBtn) {
@@ -667,10 +620,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            showToast('Đang chuyển đến cổng Thanh Toán Bảo Chứng ComicHub...', 'primary', 'fa-shield-halved fa-spin');
-            setTimeout(() => {
-                window.location.href = 'payment.html';
-            }, 700);
+            showToast(
+                'Backend hiện chỉ có API Buy Now cho một sản phẩm; checkout nhiều sản phẩm từ giỏ hàng chưa được hỗ trợ.',
+                'warning',
+                'fa-triangle-exclamation'
+            );
         });
     }
 

@@ -9,7 +9,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -21,9 +22,19 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
         Optional<Product> findBySlugAndDeletedAtIsNull(String slug);
 
+        @Lock(LockModeType.PESSIMISTIC_WRITE)
+        @Query("SELECT p FROM Product p WHERE p.id = :id")
+        Optional<Product> findByIdForUpdate(@Param("id") Long id);
+
         boolean existsBySlug(String slug);
 
         List<Product> findBySellerAndDeletedAtIsNullOrderByCreatedAtDesc(User seller);
+
+        long countByDeletedAtIsNull();
+
+        long countByModerationStatusAndDeletedAtIsNull(ModerationStatus moderationStatus);
+
+        long countByActiveAndDeletedAtIsNull(Boolean active);
 
         @Query("""
                                     SELECT p FROM Product p

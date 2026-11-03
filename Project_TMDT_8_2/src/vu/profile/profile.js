@@ -11,6 +11,7 @@ const roles = {
 };
 const fields = {
     displayName: document.querySelector("#display-name"),
+    phone: document.querySelector("#phone"),
     email: document.querySelector("#email")
 };
 function showToast(message, type = "error") {
@@ -40,6 +41,7 @@ function renderRole(user) {
 function renderUser(user) {
     fields.displayName.value = user.fullName || "";
     fields.email.value = user.email || "";
+    fields.phone.value = user.phone || "";
     document.querySelector("[data-display-name]").textContent = user.fullName || "Thành viên";
     document.querySelector("[data-display-email]").textContent = user.email || "";
     localStorage.setItem("userName", user.fullName || "");
@@ -62,18 +64,35 @@ if (savedAvatar) document.querySelector("[data-avatar]").innerHTML = `<img src="
 
 document.querySelector("#profile-form").addEventListener("submit", async (event) => {
     event.preventDefault();
+
     const name = fields.displayName.value.trim();
-    const error = name ? "" : "Vui lòng nhập tên hiển thị.";
-    const input = fields.displayName;
-    const errorElement = document.querySelector("[data-error-for='displayName']");
-    input.setAttribute("aria-invalid", String(Boolean(error)));
-    errorElement.textContent = error;
-    if (error) return;
+    const phone = fields.phone.value.trim();
+
+    const nameError = name
+        ? ""
+        : "Vui lòng nhập tên hiển thị.";
+
+    const phoneError = phone && !/^[0-9+\s().-]{8,20}$/.test(phone)
+        ? "Số điện thoại không hợp lệ."
+        : "";
+
+    fields.displayName.setAttribute("aria-invalid", String(Boolean(nameError)));
+    document.querySelector("[data-error-for='displayName']").textContent = nameError;
+
+    fields.phone.setAttribute("aria-invalid", String(Boolean(phoneError)));
+    document.querySelector("[data-error-for='phone']").textContent = phoneError;
+
+    if (nameError || phoneError) return;
 
     try {
-        const user = await updateCurrentUserProfile({ fullName: name });
+        const user = await updateCurrentUserProfile({
+            fullName: name,
+            phone: phone || null
+        });
+
         renderUser(user);
         showToast("Thông tin hồ sơ đã được lưu.", "success");
+
     } catch (requestError) {
         showToast(requestError.message);
     }

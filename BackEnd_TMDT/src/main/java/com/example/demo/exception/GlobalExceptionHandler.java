@@ -1,6 +1,7 @@
 package com.example.demo.exception;
 
 import com.example.demo.dto.ApiResponse;
+import com.example.demo.security.GoogleIdentityTokenVerifierUnavailableException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,8 +34,19 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<ApiResponse<Void>> handleUnreadableMessage(HttpMessageNotReadableException ex) {
-        return ResponseEntity.badRequest().body(ApiResponse.fail("Dữ liệu yêu cầu không hợp lệ."));
+    public ResponseEntity<ApiResponse<Void>> handleUnreadableMessage(
+            HttpMessageNotReadableException ex
+    ) {
+        Throwable cause = ex.getMostSpecificCause();
+
+        String message = "Dữ liệu JSON không hợp lệ.";
+
+        if (cause != null && cause.getMessage() != null) {
+            message += " Chi tiết: " + cause.getMessage();
+        }
+
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.fail(message));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
@@ -57,6 +69,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleDataIntegrity(DataIntegrityViolationException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.fail("Dữ liệu đã tồn tại hoặc vi phạm ràng buộc."));
+    }
+
+    @ExceptionHandler(GoogleIdentityTokenVerifierUnavailableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleGoogleVerificationUnavailable(
+            GoogleIdentityTokenVerifierUnavailableException ex
+    ) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.fail("Không thể xác minh Google lúc này. Vui lòng thử lại."));
     }
 
     @ExceptionHandler(Exception.class)

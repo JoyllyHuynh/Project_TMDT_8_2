@@ -4,6 +4,7 @@ import com.example.demo.dto.ApiResponse;
 import com.example.demo.dto.auth.AuthResponse;
 import com.example.demo.dto.auth.ForgotPasswordRequest;
 import com.example.demo.dto.auth.LoginRequest;
+import com.example.demo.dto.auth.GoogleLoginRequest;
 import com.example.demo.dto.auth.RegisterRequest;
 import com.example.demo.dto.auth.ResetPasswordRequest;
 import com.example.demo.dto.auth.UpdateProfileRequest;
@@ -39,6 +40,16 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success("Đăng nhập thành công", authService.login(request)));
     }
 
+    @PostMapping("/google")
+    public ResponseEntity<ApiResponse<AuthResponse>> googleLogin(
+            @Valid @RequestBody GoogleLoginRequest request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Đăng nhập bằng Google thành công.",
+                authService.loginWithGoogle(request.getIdToken(), request.isRemember())
+        ));
+    }
+
     @PostMapping("/forgot-password")
     public ResponseEntity<ApiResponse<Void>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         authService.requestPasswordReset(request);
@@ -61,6 +72,14 @@ public class AuthController {
     public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request);
         return ResponseEntity.ok(ApiResponse.success("Mật khẩu đã được cập nhật.", null));
+    }
+
+    @PostMapping("/me/seller-request")
+    public ResponseEntity<ApiResponse<UserResponse>> requestSellerRole() {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Đã gửi yêu cầu trở thành người bán, chờ admin xét duyệt.",
+                UserResponse.from(authService.requestSellerRole(SecurityUtils.currentUserId()))
+        ));
     }
 
     @GetMapping("/me")

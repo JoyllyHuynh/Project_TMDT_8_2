@@ -1790,3 +1790,37 @@ img {
         text-align: center;
     }
 }
+
+.voucher-tabs-bar,
+.voucher-category-group {
+    display: none;
+}
+
+.voucher-catalog-notice {
+    margin: 20px 0;
+    padding: 16px 20px;
+    border: 1px solid #fed7aa;
+    border-radius: 12px;
+    background: #fff7ed;
+    color: #7c2d12;
+    line-height: 1.6;
+}
+
+.voucher-type-label {
+    display: block;
+    margin-top: 12px;
+    color: var(--secondary);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.voucher-type-select {
+    width: 100%;
+    margin-top: 4px;
+    padding: 8px 10px;
+    border: 1px solid var(--neutral-border);
+    border-radius: var(--radius-md);
+    background: #ffffff;
+    color: var(--secondary);
+    font-size: 12px;
+}

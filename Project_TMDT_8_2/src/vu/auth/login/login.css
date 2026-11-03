@@ -1,2 +1,41 @@
 /* Login-only adjustment; the shared stylesheet owns the form system. */
 .auth-card { border-top: 4px solid var(--primary-default); }
+
+
+.auth-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 20px 0;
+    color: #6b7280;
+    font-size: 13px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: #e5e7eb;
+}
+
+#google-signin-button {
+    display: flex;
+    justify-content: center;
+    min-height: 40px;
+}
+
+#google-signin-button[aria-busy="true"] {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+#google-error {
+    display: block;
+    margin-top: 8px;
+    text-align: center;
+}
+
+#google-error[hidden] {
+    display: none;
+}
