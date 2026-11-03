@@ -70,7 +70,8 @@ public class SecurityConfig {
                                 "/api/products/**",
                                 "/api/categories/**",
                                 "/api/authors/**",
-                                "/api/publishers/**"
+                                "/api/publishers/**",
+                                "/uploads/**"
                         ).permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()

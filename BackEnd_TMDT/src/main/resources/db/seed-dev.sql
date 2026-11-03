@@ -347,6 +347,164 @@ WHERE NOT EXISTS (
       AND existing_image.display_order = seed.display_order
 );
 
+INSERT INTO users (email, password_hash, full_name, role, is_seller, account_status)
+SELECT 'buyer@comicworm.com',
+       '$2a$10$7eS86uxi5DSsTzhj.PI7A.iLZJwSCs7Tw4TqAmsRKE5TRaaKO6r3a',
+       'ComicWorm Buyer',
+       'USER',
+       FALSE,
+       'ACTIVE'
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM users
+    WHERE email = 'buyer@comicworm.com'
+);
+
+INSERT INTO checkout_batches (checkout_code, buyer_id, idempotency_key, total_amount, expires_at)
+SELECT 'DEV-CHECKOUT-REVIEW', buyer.id, 'dev-checkout-review-1', 170000.00, DATE_ADD(NOW(), INTERVAL 7 DAY)
+FROM users AS buyer
+WHERE buyer.email = 'buyer@comicworm.com'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM checkout_batches
+      WHERE checkout_code = 'DEV-CHECKOUT-REVIEW'
+  );
+
+INSERT INTO orders (
+    order_code, checkout_id, buyer_id, seller_id,
+    subtotal_amount, shipping_fee, total_amount,
+    recipient_name, recipient_phone, shipping_address, buyer_note,
+    status, payment_status
+)
+SELECT 'DEV-ORD-REVIEW-1', checkout.id, buyer.id, seller.id,
+       75000.00, 25000.00, 100000.00,
+       'ComicWorm Buyer', '0900000001',
+       '123 Đường Demo, Phường Bến Nghé, Quận 1, TP.HCM',
+       'Đơn demo dùng để đánh giá sản phẩm.',
+       'DELIVERED', 'PAID'
+FROM users AS buyer
+JOIN users AS seller ON seller.email = 'seller@comicworm.com'
+JOIN checkout_batches AS checkout ON checkout.checkout_code = 'DEV-CHECKOUT-REVIEW'
+WHERE buyer.email = 'buyer@comicworm.com'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM orders
+      WHERE order_code = 'DEV-ORD-REVIEW-1'
+  );
+
+INSERT INTO orders (
+    order_code, checkout_id, buyer_id, seller_id,
+    subtotal_amount, shipping_fee, total_amount,
+    recipient_name, recipient_phone, shipping_address, buyer_note,
+    status, payment_status, completed_at
+)
+SELECT 'DEV-ORD-REVIEW-2', checkout.id, buyer.id, seller.id,
+       50000.00, 20000.00, 70000.00,
+       'ComicWorm Buyer', '0900000001',
+       '123 Đường Demo, Phường Bến Nghé, Quận 1, TP.HCM',
+       'Đơn demo đã hoàn tất và đã có đánh giá.',
+       'COMPLETED', 'PAID', DATE_SUB(NOW(), INTERVAL 3 DAY)
+FROM users AS buyer
+JOIN users AS seller ON seller.email = 'seller@comicworm.com'
+JOIN checkout_batches AS checkout ON checkout.checkout_code = 'DEV-CHECKOUT-REVIEW'
+WHERE buyer.email = 'buyer@comicworm.com'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM orders
+      WHERE order_code = 'DEV-ORD-REVIEW-2'
+  );
+
+INSERT INTO order_items (order_id, product_id, product_title, image_url, condition_percent, unit_price, quantity)
+SELECT orders.id, product.id, product.title,
+       (SELECT image.image_url FROM product_images AS image WHERE image.product_id = product.id ORDER BY image.display_order LIMIT 1),
+       product.condition_percent, product.price, 1
+FROM orders
+JOIN products AS product ON product.slug = 'dev-one-piece-volume-1'
+WHERE orders.order_code = 'DEV-ORD-REVIEW-1'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM order_items
+      WHERE order_id = orders.id
+        AND product_id = product.id
+  );
+
+INSERT INTO order_items (order_id, product_id, product_title, image_url, condition_percent, unit_price, quantity)
+SELECT orders.id, product.id, product.title,
+       (SELECT image.image_url FROM product_images AS image WHERE image.product_id = product.id ORDER BY image.display_order LIMIT 1),
+       product.condition_percent, product.price, 1
+FROM orders
+JOIN products AS product ON product.slug = 'dev-naruto-volume-1'
+WHERE orders.order_code = 'DEV-ORD-REVIEW-2'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM order_items
+      WHERE order_id = orders.id
+        AND product_id = product.id
+  );
+
+INSERT INTO order_status_history (order_id, previous_status, new_status, changed_by, note)
+SELECT orders.id, NULL, 'DELIVERED', seller.id, 'Người bán đã giao hàng cho đơn vị vận chuyển.'
+FROM orders
+JOIN users AS seller ON seller.email = 'seller@comicworm.com'
+WHERE orders.order_code = 'DEV-ORD-REVIEW-1'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM order_status_history
+      WHERE order_id = orders.id
+        AND new_status = 'DELIVERED'
+  );
+
+INSERT INTO order_status_history (order_id, previous_status, new_status, changed_by, note)
+SELECT orders.id, NULL, 'DELIVERED', seller.id, 'Người bán đã giao hàng cho đơn vị vận chuyển.'
+FROM orders
+JOIN users AS seller ON seller.email = 'seller@comicworm.com'
+WHERE orders.order_code = 'DEV-ORD-REVIEW-2'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM order_status_history
+      WHERE order_id = orders.id
+        AND new_status = 'DELIVERED'
+  );
+
+INSERT INTO order_status_history (order_id, previous_status, new_status, changed_by, note)
+SELECT orders.id, 'DELIVERED', 'COMPLETED', buyer.id, 'Người mua đã xác nhận nhận hàng.'
+FROM orders
+JOIN users AS buyer ON buyer.email = 'buyer@comicworm.com'
+WHERE orders.order_code = 'DEV-ORD-REVIEW-2'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM order_status_history
+      WHERE order_id = orders.id
+        AND new_status = 'COMPLETED'
+  );
+
+INSERT INTO reviews (order_item_id, buyer_id, rating, content)
+SELECT item.id, buyer.id, 4,
+       'Truyện đúng mô tả, gáy và bìa còn chắc, chỉ hơi xước nhẹ ở góc. Đóng gói cẩn thận, giao đúng hẹn.'
+FROM order_items AS item
+JOIN orders ON orders.id = item.order_id
+JOIN users AS buyer ON buyer.email = 'buyer@comicworm.com'
+WHERE orders.order_code = 'DEV-ORD-REVIEW-2'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM reviews
+      WHERE order_item_id = item.id
+  );
+
+INSERT INTO review_replies (review_id, seller_id, content)
+SELECT review.id, seller.id,
+       'Cảm ơn bạn đã chia sẻ. Shop sẽ chú ý bọc kỹ hơn ở các đơn tiếp theo.'
+FROM reviews AS review
+JOIN order_items AS item ON item.id = review.order_item_id
+JOIN orders ON orders.id = item.order_id
+JOIN users AS seller ON seller.email = 'seller@comicworm.com'
+WHERE orders.order_code = 'DEV-ORD-REVIEW-2'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM review_replies
+      WHERE review_id = review.id
+  );
+
 COMMIT;
 
 -- Overall table counts; compare with the database before and after the seed.
