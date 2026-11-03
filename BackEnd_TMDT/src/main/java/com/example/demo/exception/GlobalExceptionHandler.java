@@ -32,8 +32,19 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<ApiResponse<Void>> handleUnreadableMessage(HttpMessageNotReadableException ex) {
-        return ResponseEntity.badRequest().body(ApiResponse.fail("Dữ liệu yêu cầu không hợp lệ."));
+    public ResponseEntity<ApiResponse<Void>> handleUnreadableMessage(
+            HttpMessageNotReadableException ex
+    ) {
+        Throwable cause = ex.getMostSpecificCause();
+
+        String message = "Dữ liệu JSON không hợp lệ.";
+
+        if (cause != null && cause.getMessage() != null) {
+            message += " Chi tiết: " + cause.getMessage();
+        }
+
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.fail(message));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)

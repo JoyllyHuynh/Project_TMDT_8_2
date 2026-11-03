@@ -29,9 +29,9 @@ public class Order {
 
     @Column(name = "order_code", nullable = false, unique = true, length = 60)
     private String orderCode;
-
-    @ManyToOne(fetch = FetchType.LAZY, optional = true)
-    @JoinColumn(name = "checkout_id", nullable = true)
+    
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "checkout_id", nullable = false)
     private CheckoutBatch checkout;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -47,6 +47,9 @@ public class Order {
 
     @Column(name = "shipping_fee", nullable = false, precision = 15, scale = 2)
     private BigDecimal shippingFee = BigDecimal.ZERO;
+
+    @Column(name = "discount_amount", nullable = false, precision = 15, scale = 2)
+    private BigDecimal discountAmount = BigDecimal.ZERO;   
 
     @Column(name = "total_amount", nullable = false, precision = 15, scale = 2)
     private BigDecimal totalAmount;

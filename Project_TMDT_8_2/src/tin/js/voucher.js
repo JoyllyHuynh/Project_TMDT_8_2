@@ -3,12 +3,15 @@
  * COMICHUB - KHO VOUCHER & TỐI ƯU ƯU ĐÃI (VOUCHER VAULT LOGIC)
  * ============================================================================
  * File: voucher-vault.js / script.js
- * Mô tả: Quản lý chọn/đổi/gỡ voucher 3 slot, tính toán tổng giảm giá realtime,
- *       lọc/sắp xếp danh sách, lưu mã mới và đồng bộ với trang Checkout qua localStorage.
+ * Mô tả: Quản lý mã voucher đang chọn và chuyển mã sang trang Checkout để Backend xác thực.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
     'use strict';
+
+    document.querySelectorAll('.voucher-tabs-bar, .voucher-category-group').forEach((section) => {
+        section.hidden = true;
+    });
 
     // --------------------------------------------------------------------------
     // 0. TIỆN ÍCH DÙNG CHUNG: TOAST NOTIFICATION
@@ -65,7 +68,12 @@ document.addEventListener('DOMContentLoaded', () => {
       line-height: 1.4;
     `;
 
-        toast.innerHTML = `<i class="fa-solid ${icon}" style="font-size: 16px;"></i> <span>${message}</span>`;
+        const toastIcon = document.createElement('i');
+        toastIcon.className = `fa-solid ${icon}`;
+        toastIcon.style.fontSize = '16px';
+        const toastMessage = document.createElement('span');
+        toastMessage.textContent = message;
+        toast.append(toastIcon, toastMessage);
         container.appendChild(toast);
 
         requestAnimationFrame(() => {
@@ -83,87 +91,60 @@ document.addEventListener('DOMContentLoaded', () => {
     // --------------------------------------------------------------------------
     // 1. TIỆN ÍCH ĐỊNH DẠNG TIỀN TỆ & STATE VOUCHER DANG CHỌN
     // --------------------------------------------------------------------------
-    const formatMoney = (amount) => {
-        return new Intl.NumberFormat('vi-VN').format(amount) + '₫';
-    };
-
-    // State các voucher đang áp dụng theo 3 slot gộp độc quyền của ComicHub
+    const voucherStorageKey = 'comichub_checkout_voucher_codes';
     const voucherState = {
-        // Slot 1: Voucher Sách & Comic (Toàn sàn hoặc Shop)
-        bookVoucher: {
-            code: 'OTAKU50K',
-            discount: 50000,
-            title: 'Giảm 50.000₫ đơn từ 400.000₫'
-        },
-        // Slot 2: Voucher Miễn Phí Vận Chuyển SafeShip
-        shippingVoucher: {
-            code: 'COMICFREE',
-            discount: 35000,
-            title: 'Giảm tối đa 35.000₫ phí ship SafeShip'
-        },
-        // Slot 3: Voucher Barter Ký Quỹ hoặc Hoàn Xu Otaku
-        barterOrCoinVoucher: null,
-        orderTotalValue: 5050000
+        platformCode: null,
+        sellerCode: null,
+        shippingCode: null
     };
 
-    // Đọc dữ liệu từ localStorage nếu đã được lưu từ trang Checkout/Cart
     try {
-        const saved = localStorage.getItem('comichub_applied_vouchers');
-        if (saved) {
-            const parsed = JSON.parse(saved);
-            if (parsed.bookVoucher !== undefined) voucherState.bookVoucher = parsed.bookVoucher;
-            if (parsed.shippingVoucher !== undefined) voucherState.shippingVoucher = parsed.shippingVoucher;
-            if (parsed.barterOrCoinVoucher !== undefined) voucherState.barterOrCoinVoucher = parsed.barterOrCoinVoucher;
+        const saved = JSON.parse(sessionStorage.getItem(voucherStorageKey) || 'null');
+        for (const field of Object.keys(voucherState)) {
+            if (typeof saved?.[field] === 'string') voucherState[field] = saved[field];
         }
-    } catch (e) {
-        console.warn('Cannot parse localStorage for vouchers', e);
+    } catch {
+        sessionStorage.removeItem(voucherStorageKey);
     }
 
-    // --------------------------------------------------------------------------
-    // 2. TÍNH TOÁN & CẬP NHẬT FLOATING STICKY ACTION BAR & TOP BADGES
-    // --------------------------------------------------------------------------
     const updateFloatingBar = () => {
-        const activeCodes = [];
-        const bookDiscount = voucherState.bookVoucher ? voucherState.bookVoucher.discount : 0;
-        const shipDiscount = voucherState.shippingVoucher ? voucherState.shippingVoucher.discount : 0;
-        const extraDiscount = voucherState.barterOrCoinVoucher ? voucherState.barterOrCoinVoucher.discount : 0;
-
-        if (voucherState.bookVoucher) activeCodes.push(voucherState.bookVoucher.code);
-        if (voucherState.shippingVoucher) activeCodes.push(voucherState.shippingVoucher.code);
-        if (voucherState.barterOrCoinVoucher) activeCodes.push(voucherState.barterOrCoinVoucher.code);
-
-        const totalDiscount = bookDiscount + shipDiscount + extraDiscount;
+        const activeCodes = Object.values(voucherState).filter(Boolean);
 
         const floatingTitleRow = document.querySelector('.floating-title-row');
         if (floatingTitleRow) {
             if (activeCodes.length === 0) {
                 floatingTitleRow.innerHTML = `<strong>Chưa chọn mã ưu đãi nào</strong>`;
             } else {
-                const badgesHtml = activeCodes.map(code => `<span class="tag-code-active">${code}</span>`).join(' ');
-                floatingTitleRow.innerHTML = `<strong>Đã áp dụng ${activeCodes.length} voucher vào giỏ:</strong> ${badgesHtml}`;
+                const badges = activeCodes.map((code) => {
+                    const badge = document.createElement('span');
+                    badge.className = 'tag-code-active';
+                    badge.textContent = code;
+                    return badge;
+                });
+                floatingTitleRow.replaceChildren();
+                const message = document.createElement('strong');
+                message.textContent = `Đã chọn ${activeCodes.length} mã; cần xác thực ở thanh toán: `;
+                floatingTitleRow.append(message, ...badges);
             }
         }
 
         const savingCalcEl = document.querySelector('.floating-saving-calc');
         if (savingCalcEl) {
-            savingCalcEl.innerHTML = `
-        Tổng số tiền khấu trừ: <strong class="highlight-saving">-${formatMoney(totalDiscount)}</strong>
-        <span class="saving-detail text-slate-500">(Giảm tiền sách: ${formatMoney(bookDiscount)} • Giảm phí vận chuyển: ${formatMoney(shipDiscount)}${extraDiscount > 0 ? ` • Trợ giá: ${formatMoney(extraDiscount)}` : ''})</span>
-      `;
+            savingCalcEl.textContent = 'Số tiền giảm sẽ được tính sau khi Backend xác thực mã tại trang thanh toán.';
         }
 
         const cartContextTag = document.querySelector('.cart-context-badge .tag-auto-applied, .cart-context-badge-tag');
         if (cartContextTag) {
             cartContextTag.textContent = activeCodes.length > 0
-                ? `TỰ ĐỘNG TỐI ƯU ${activeCodes.length} MÃ (-${formatMoney(totalDiscount)})`
+                ? `${activeCodes.length} MÃ ĐANG CHỌN · CHỜ XÁC THỰC`
                 : 'CHƯA CHỌN MÃ';
         }
 
         const btnConfirm = document.querySelector('.btn-confirm-checkout');
         if (btnConfirm) {
-            btnConfirm.disabled = (activeCodes.length === 0);
-            btnConfirm.style.opacity = (activeCodes.length === 0) ? '0.6' : '1';
-            btnConfirm.style.cursor = (activeCodes.length === 0) ? 'not-allowed' : 'pointer';
+            btnConfirm.disabled = false;
+            btnConfirm.style.opacity = '1';
+            btnConfirm.style.cursor = 'pointer';
         }
     };
 
@@ -237,14 +218,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const actionBtn = card.querySelector('.btn-ticket-action');
             const termsBtn = card.querySelector('.btn-terms');
 
-            const leftStub = card.querySelector('.ticket-left-stub');
-            let type = 'book';
-            if (leftStub?.classList.contains('bg-teal') || codeBadge.includes('SHIP') || codeBadge.includes('FREE')) {
-                type = 'shipping';
-            } else if (leftStub?.classList.contains('bg-amber') || codeBadge.includes('COIN')) {
-                type = 'coin';
-            } else if (leftStub?.classList.contains('bg-purple') || codeBadge.includes('BARTER') || codeBadge.includes('CGC')) {
-                type = 'barter';
+            const categoryTitle = card.closest('.voucher-category-group')
+                ?.querySelector('.category-title-wrap h2')?.textContent.toLowerCase() || '';
+            const field = categoryTitle.includes('vận chuyển')
+                ? 'shippingCode'
+                : categoryTitle.includes('toàn sàn')
+                    ? 'platformCode'
+                    : categoryTitle.includes('shop')
+                        ? 'sellerCode'
+                        : null;
+
+            card.classList.remove('applied-border');
+            card.querySelector('.badge-in-use')?.remove();
+            if (actionBtn?.textContent.includes('Bỏ Chọn')) {
+                actionBtn.className = 'btn-ticket-action btn-primary-orange';
+                actionBtn.textContent = 'Dùng Ngay';
             }
 
             // 5.1 Nút Thao tác chính trên thẻ Voucher
@@ -255,12 +243,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // Thao tác: "Bỏ Chọn"
                     if (btnText.includes('Bỏ Chọn')) {
-                        if (type === 'shipping') {
-                            voucherState.shippingVoucher = null;
-                        } else if (type === 'book') {
-                            voucherState.bookVoucher = null;
-                        } else {
-                            voucherState.barterOrCoinVoucher = null;
+                        const previousCode = field ? voucherState[field] : null;
+                        if (field) voucherState[field] = null;
+                        if (!saveVoucherCodes()) {
+                            if (field) voucherState[field] = previousCode;
+                            return;
                         }
 
                         card.classList.remove('applied-border');
@@ -277,67 +264,62 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // Thao tác: "Đổi Mã Này" hoặc "Dùng Ngay"
                     if (btnText.includes('Đổi') || btnText.includes('Dùng Ngay')) {
-                        const titleText = card.querySelector('.voucher-discount-title')?.textContent.trim() || '';
-                        let discountValue = 50000;
-
-                        if (titleText.includes('35.000')) discountValue = 35000;
-                        else if (titleText.includes('70.000')) discountValue = 70000;
-                        else if (titleText.includes('100.000')) discountValue = 100000;
-                        else if (titleText.includes('200.000')) discountValue = 200000;
-                        else if (titleText.includes('40.000')) discountValue = 40000;
-                        else if (titleText.includes('25.000')) discountValue = 25000;
-                        else if (titleText.includes('60k') || titleText.includes('60.000')) discountValue = 60000;
+                        if (!field) {
+                            showToast('Backend checkout hiện chỉ hỗ trợ voucher PLATFORM, SELLER và SHIPPING.', 'warning', 'fa-triangle-exclamation');
+                            return;
+                        }
 
                         // Reset trạng thái hiển thị của các thẻ cùng phân loại
                         ticketCards.forEach(otherCard => {
-                            const otherStub = otherCard.querySelector('.ticket-left-stub');
-                            const isSameType = (type === 'shipping' && (otherStub?.classList.contains('bg-teal') || otherCard.textContent.includes('phí ship'))) ||
-                                (type === 'book' && (otherStub?.classList.contains('bg-orange') || otherCard.textContent.includes('Toàn Sàn')));
-
-                            if (isSameType && otherCard !== card) {
+                            const otherTitle = otherCard.closest('.voucher-category-group')
+                                ?.querySelector('.category-title-wrap h2')?.textContent.toLowerCase() || '';
+                            const otherField = otherTitle.includes('vận chuyển')
+                                ? 'shippingCode'
+                                : otherTitle.includes('toàn sàn')
+                                    ? 'platformCode'
+                                    : otherTitle.includes('shop')
+                                        ? 'sellerCode'
+                                        : null;
+                            if (otherField === field && otherCard !== card) {
                                 otherCard.classList.remove('applied-border');
                                 const otherBtn = otherCard.querySelector('.btn-ticket-action');
-                                if (otherBtn && otherBtn.textContent.includes('Bỏ Chọn')) {
-                                    otherBtn.className = 'btn-ticket-action btn-outline-orange';
-                                    otherBtn.textContent = 'Đổi Mã Này';
+                                if (otherBtn) {
+                                    otherBtn.className = 'btn-ticket-action btn-primary-orange';
+                                    otherBtn.textContent = 'Dùng Ngay';
                                 }
                                 const otherBadge = otherCard.querySelector('.badge-in-use');
                                 if (otherBadge) otherBadge.remove();
                             }
                         });
 
-                        const newVoucher = { code: codeBadge, discount: discountValue, title: titleText };
-                        if (type === 'shipping') {
-                            voucherState.shippingVoucher = newVoucher;
-                        } else if (type === 'book') {
-                            voucherState.bookVoucher = newVoucher;
-                        } else {
-                            voucherState.barterOrCoinVoucher = newVoucher;
+                        const previousCode = voucherState[field];
+                        voucherState[field] = codeBadge;
+                        if (!saveVoucherCodes()) {
+                            voucherState[field] = previousCode;
+                            return;
                         }
 
                         card.classList.add('applied-border');
                         card.classList.remove('highlight-border');
                         actionBtn.className = 'btn-ticket-action btn-outline-cancel';
-                        actionBtn.textContent = 'Bỏ Chọn';
+                        actionBtn.textContent = 'Bỏ Chọn (chờ kiểm tra)';
 
                         const badgeRow = card.querySelector('.ticket-badge-row');
                         if (badgeRow && !badgeRow.querySelector('.badge-in-use')) {
                             const inUsePill = document.createElement('span');
                             inUsePill.className = 'badge-in-use';
-                            inUsePill.textContent = 'ĐANG ÁP DỤNG';
+                            inUsePill.textContent = 'CHỜ BACKEND XÁC THỰC';
                             badgeRow.insertBefore(inUsePill, badgeRow.firstChild);
                         }
 
                         updateFloatingBar();
-                        showToast(`Áp dụng thành công "${codeBadge}" (${titleText})!`, 'success', 'fa-ticket');
+                        showToast(`Đã chọn mã "${codeBadge}". Mã sẽ được xác thực tại thanh toán.`, 'info', 'fa-ticket');
                         return;
                     }
 
                     // Thao tác: "Lưu Thêm" / "Lưu Mã"
                     if (btnText.includes('Lưu')) {
-                        actionBtn.textContent = 'Dùng Ngay';
-                        actionBtn.className = 'btn-ticket-action btn-primary-orange';
-                        showToast(`Đã lưu mã "${codeBadge}" vào Ví Voucher của bạn!`, 'success', 'fa-bookmark');
+                        showToast('Backend hiện chưa cung cấp API lưu hoặc liệt kê kho voucher.', 'warning', 'fa-circle-info');
                         return;
                     }
 
@@ -464,44 +446,36 @@ document.addEventListener('DOMContentLoaded', () => {
     // --------------------------------------------------------------------------
     // 7. FORM NHẬP MÃ VOUCHER MỚI & GỢI Ý 1-CLICK TẠI HERO BANNER
     // --------------------------------------------------------------------------
-    const voucherInput = document.querySelector('.voucher-text-input, input[placeholder*="OTAKU50K"]');
+    const voucherInput = document.querySelector('.voucher-text-input');
+    const voucherTypeSelect = document.querySelector('.voucher-type-select');
     const btnSaveVoucher = document.querySelector('.btn-save-voucher');
-    const suggestButtons = document.querySelectorAll('.btn-suggest-code');
 
-    const knownVouchers = {
-        'OTAKU50K': { discount: 50000, type: 'book', name: 'Giảm 50.000₫ đơn từ 400k' },
-        'COMICFREE': { discount: 35000, type: 'shipping', name: 'Freeship SafeShip 35.000₫' },
-        'MANGA100K': { discount: 100000, type: 'book', name: 'Giảm 100.000₫ đơn từ 1.200k' },
-        'BARTERSAFE': { discount: 40000, type: 'barter', name: 'Miễn phí ký quỹ Escrow 40k' },
-        'GOLDCOIN15': { discount: 150000, type: 'coin', name: 'Hoàn 15% tối đa 150k Coins' }
-    };
-
-    const processInputCode = (rawCode) => {
+    const processInputCode = (rawCode, field) => {
         const clean = rawCode.trim().toUpperCase();
         if (!clean) {
-            showToast('Vui lòng nhập mã ưu đãi trước khi nhấn Lưu!', 'warning', 'fa-triangle-exclamation');
+            showToast('Vui lòng nhập mã ưu đãi.', 'warning', 'fa-triangle-exclamation');
+            return;
+        }
+        if (!Object.hasOwn(voucherState, field)) {
+            showToast('Vui lòng chọn loại voucher PLATFORM, SELLER hoặc SHIPPING.', 'warning', 'fa-triangle-exclamation');
             return;
         }
 
-        if (knownVouchers[clean]) {
-            const v = knownVouchers[clean];
-            showToast(`Đã lưu thành công mã "${clean}" (${v.name}) vào Kho Voucher của bạn!`, 'success', 'fa-ticket');
-            if (voucherInput) voucherInput.value = '';
-
-            const countEl = document.querySelector('.stat-number, .wallet-stats-grid .stat-cell:first-child .stat-number');
-            if (countEl) {
-                const currentCount = parseInt(countEl.textContent, 10) || 18;
-                countEl.textContent = currentCount + 1;
-            }
-        } else {
-            showToast(`Mã "${clean}" không tồn tại hoặc đã hết hạn sử dụng!`, 'danger', 'fa-circle-exclamation');
+        const previousCode = voucherState[field];
+        voucherState[field] = clean;
+        if (!saveVoucherCodes()) {
+            voucherState[field] = previousCode;
+            return;
         }
+        updateFloatingBar();
+        if (voucherInput) voucherInput.value = '';
+        showToast(`Đã chuyển mã "${clean}" sang checkout. Backend sẽ xác thực trước khi áp dụng.`, 'info', 'fa-ticket');
     };
 
     if (btnSaveVoucher) {
         btnSaveVoucher.addEventListener('click', (e) => {
             e.preventDefault();
-            if (voucherInput) processInputCode(voucherInput.value);
+            if (voucherInput) processInputCode(voucherInput.value, voucherTypeSelect?.value);
         });
     }
 
@@ -509,21 +483,20 @@ document.addEventListener('DOMContentLoaded', () => {
         voucherInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                processInputCode(voucherInput.value);
+                processInputCode(voucherInput.value, voucherTypeSelect?.value);
             }
         });
     }
 
-    suggestButtons.forEach(btn => {
-        btn.style.cursor = 'pointer';
-        btn.addEventListener('click', () => {
-            const text = btn.textContent.trim().replace(/[^\w]/g, '');
-            if (voucherInput && text) {
-                voucherInput.value = text;
-                processInputCode(text);
-            }
-        });
-    });
+    function saveVoucherCodes() {
+        try {
+            sessionStorage.setItem(voucherStorageKey, JSON.stringify(voucherState));
+            return true;
+        } catch {
+            showToast('Không thể lưu mã tạm trong trình duyệt. Vui lòng kiểm tra quyền lưu trữ rồi thử lại.', 'danger', 'fa-circle-exclamation');
+            return false;
+        }
+    }
 
     // --------------------------------------------------------------------------
     // 8. ĐỒNG Ý & THANH TOÁN (LƯU LOCALSTORAGE VÀ ĐIỀU HƯỚNG SANG CHECKOUT.HTML)
@@ -535,13 +508,8 @@ document.addEventListener('DOMContentLoaded', () => {
         btnCheckoutConfirm.addEventListener('click', (e) => {
             e.preventDefault();
 
-            try {
-                localStorage.setItem('comichub_applied_vouchers', JSON.stringify(voucherState));
-            } catch (err) {
-                console.warn('LocalStorage save error', err);
-            }
-
-            showToast('Đang áp dụng ưu đãi và quay lại đơn hàng thanh toán...', 'primary', 'fa-shield-halved');
+            if (!saveVoucherCodes()) return;
+            showToast('Đang chuyển sang thanh toán. Backend sẽ xác thực các mã đã chọn.', 'primary', 'fa-shield-halved');
 
             setTimeout(() => {
                 window.location.href = 'payment.html';

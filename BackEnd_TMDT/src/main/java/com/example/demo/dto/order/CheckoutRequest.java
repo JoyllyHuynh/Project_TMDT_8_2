@@ -30,7 +30,12 @@ public class CheckoutRequest {
 
     private String buyerNote;
     private ShippingMethod shippingMethod =  ShippingMethod.STANDARD;
-    private BigDecimal shippingFee = BigDecimal.ZERO;
     private PaymentMethod paymentMethod = PaymentMethod.VNPAY;
+    @NotBlank
     private String idempotencyKey;
+
+    //voucher
+    private String platformCode;
+    private String sellerCode;
+    private String shippingCode;
 }

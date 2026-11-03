@@ -69,6 +69,7 @@ public class AdminService {
     private final RefundRepository refundRepository;
     private final PaymentAllocationRepository paymentAllocationRepository;
     private final PasswordEncoder passwordEncoder;
+    private final VoucherService voucherService;
 
     /* ======================================================================
        1. QUẢN LÝ NGƯỜI DÙNG
@@ -358,21 +359,32 @@ public class AdminService {
 
     @Transactional
     public AdminOrderResponse updateOrderStatus(Long id, UpdateOrderStatusRequest request) {
-        Order order = findOrder(id);
+        Order order = findOrderForUpdate(id);
+
         OrderStatus next = request.getStatus();
+
         if (next == null) {
-            throw ApiException.badRequest("Trạng thái đơn hàng không hợp lệ.");
+            throw ApiException.badRequest("Trạng thái đơn hàng không được để trống.");
         }
-        if (order.getStatus() == OrderStatus.COMPLETED || order.getStatus() == OrderStatus.CANCELLED) {
-            throw ApiException.badRequest("Đơn hàng đã kết thúc, không thể đổi trạng thái.");
-        }
+
+        // Gửi lại trạng thái hiện tại thì không tạo lịch sử mới
         if (next == order.getStatus()) {
             return toOrderResponse(order);
         }
 
-        // Validate valid transition according to state machine
+        // Không cho phép thay đổi đơn hàng đã kết thúc
+        if (order.getStatus() == OrderStatus.COMPLETED
+                || order.getStatus() == OrderStatus.CANCELLED) {
+            throw ApiException.badRequest(
+                "Đơn hàng đã kết thúc, không thể đổi trạng thái."
+            );
+        }
+
         if (!isValidTransition(order.getStatus(), next)) {
-            throw ApiException.badRequest("Chuyển trạng thái từ " + order.getStatus() + " sang " + next + " không hợp lệ.");
+            throw ApiException.badRequest(
+                "Chuyển trạng thái từ " + order.getStatus()
+                + " sang " + next + " không hợp lệ."
+            );
         }
 
         OrderStatus previous = order.getStatus();
@@ -411,7 +423,7 @@ public class AdminService {
 
     @Transactional
     public AdminOrderResponse openDispute(Long id, AdminRequests.OpenDispute request) {
-        Order order = findOrder(id);
+        Order order = findOrderForUpdate(id);
         if (order.getStatus() == OrderStatus.COMPLETED || order.getStatus() == OrderStatus.CANCELLED) {
             throw ApiException.badRequest("Đơn hàng đã kết thúc nên không thể mở tranh chấp.");
         }
@@ -428,7 +440,7 @@ public class AdminService {
         return toOrderResponse(order);
     }@Transactional
     public AdminOrderResponse resolveDispute(Long id, AdminRequests.ResolveDispute request) {
-        Order order = findOrder(id);
+        Order order = findOrderForUpdate(id);
         if (order.getDisputedAt() == null || order.getDisputeResolvedAt() != null) {
             throw ApiException.badRequest("Đơn hàng không có tranh chấp đang chờ xử lý.");
         }
@@ -481,6 +493,7 @@ public class AdminService {
             order.setCancelReason(note);
             order.setCancelledAt(LocalDateTime.now());
             releaseStock(order);
+            voucherService.releaseVouchersForOrder(order);
             if (order.getPaymentStatus() == OrderPaymentStatus.PAID) {
                 createRefundIfNeeded(order, actor);
             }
@@ -581,6 +594,11 @@ public class AdminService {
 
     private Order findOrder(Long id) {
         return orderRepository.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Không tìm thấy đơn hàng."));
+    }
+
+    private Order findOrderForUpdate(Long id) {
+        return orderRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy đơn hàng."));
     }
 

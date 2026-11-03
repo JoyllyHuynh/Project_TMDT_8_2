@@ -2,7 +2,17 @@
 const TRACKING_CODE = "GHN-VN-98421034";
 const toastEl = document.getElementById("toast");
 
+function onElement(id, event, callback) {
+  const element = document.getElementById(id);
+  if (!element) {
+    console.warn(`Không tìm thấy phần tử #${id} để đăng ký sự kiện ${event}.`);
+    return;
+  }
+  element.addEventListener(event, callback);
+}
+
 function showToast(message) {
+  if (!toastEl) return;
   toastEl.textContent = message;
   toastEl.classList.add("show");
   clearTimeout(showToast.timer);
@@ -11,12 +21,14 @@ function showToast(message) {
 
 function openModal() {
   const modal = document.getElementById("rescheduleModal");
+  if (!modal) return;
   modal.classList.add("show");
   modal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
 }
 function closeModal() {
   const modal = document.getElementById("rescheduleModal");
+  if (!modal) return;
   modal.classList.remove("show");
   modal.setAttribute("aria-hidden", "true");
   document.body.classList.remove("modal-open");
@@ -50,7 +62,7 @@ document.querySelectorAll("[data-path]").forEach(link => {
   });
 });
 
-document.getElementById("copyTracking").addEventListener("click", async () => {
+onElement("copyTracking", "click", async () => {
   try {
     await navigator.clipboard.writeText(TRACKING_CODE);
     showToast(`Đã sao chép mã vận đơn: ${TRACKING_CODE}`);
@@ -65,24 +77,18 @@ document.getElementById("copyTracking").addEventListener("click", async () => {
   }
 });
 
-document.getElementById("printOrder").addEventListener("click", () => window.print());
-
-document.getElementById("globalSearch").addEventListener("keydown", e => {
-  if (e.key === "Enter") {
-    const value = e.target.value.trim();
-    showToast(value ? `Đang tìm kiếm: "${value}"` : "Vui lòng nhập nội dung cần tìm.");
-  }
-});
+onElement("printOrder", "click", () => window.print());
 
 document.addEventListener("keydown", e => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
     e.preventDefault();
-    document.getElementById("globalSearch").focus();
+    const globalSearch = document.getElementById("globalSearch");
+    if (globalSearch) globalSearch.focus();
   }
   if (e.key === "Escape") closeModal();
 });
 
-document.getElementById("editNote").addEventListener("click", () => {
+onElement("editNote", "click", () => {
   const current = 'Hàng truyện tranh sưu tầm dễ gãy móp, xin vui lòng nhẹ tay. Gọi trước 10 phút.';
   const next = prompt("Nhập ghi chú mới cho shipper:", current);
   if (next !== null && next.trim()) {
@@ -97,7 +103,7 @@ document.querySelectorAll(".pack-photo").forEach(photo => {
   });
 });
 
-document.getElementById("fullscreenMap").addEventListener("click", () => {
+onElement("fullscreenMap", "click", () => {
   const map = document.querySelector(".map-preview");
   if (map.requestFullscreen) {
     map.requestFullscreen().catch(() => showToast("Trình duyệt không cho phép mở toàn màn hình."));
@@ -106,11 +112,11 @@ document.getElementById("fullscreenMap").addEventListener("click", () => {
   }
 });
 
-document.getElementById("reschedule").addEventListener("click", openModal);
-document.getElementById("closeModal").addEventListener("click", closeModal);
-document.getElementById("cancelModal").addEventListener("click", closeModal);
+onElement("reschedule", "click", openModal);
+onElement("closeModal", "click", closeModal);
+onElement("cancelModal", "click", closeModal);
 
-document.getElementById("submitReschedule").addEventListener("click", () => {
+onElement("submitReschedule", "click", () => {
   const selected = document.querySelector('input[name="slot"]:checked');
   const labels = {
     tonight: "18:00 - 20:00 tối nay",
@@ -121,14 +127,14 @@ document.getElementById("submitReschedule").addEventListener("click", () => {
   showToast(`Đã cập nhật yêu cầu hẹn giao: ${labels[selected?.value] || "khung giờ đã chọn"}.`);
 });
 
-document.getElementById("reportDelay").addEventListener("click", () => {
+onElement("reportDelay", "click", () => {
   showToast("Đã gửi cảnh báo hối thúc bưu tá Cầu Giấy ưu tiên đơn hàng.");
 });
-document.getElementById("support").addEventListener("click", () => {
+onElement("support", "click", () => {
   showToast("Đang kết nối chuyên viên thẩm định manga MangaTrade qua live chat...");
 });
 
-document.getElementById("confirmReceived").addEventListener("click", () => {
+onElement("confirmReceived", "click", () => {
   const ok = confirm("Bạn có chắc chắn đã nhận đủ trọn bộ 1-18 kèm Obi & Poster và đồng ý giải ngân tiền bán cho Shop OtakuStoreVN?");
   if (!ok) return;
   showToast("Cảm ơn bạn! Đơn hàng đã hoàn tất. Bạn nhận được 180 điểm thưởng Manga Collector.");
@@ -138,7 +144,7 @@ document.getElementById("confirmReceived").addEventListener("click", () => {
   }, 800);
 });
 
-document.getElementById("newsletter").addEventListener("submit", e => {
+onElement("newsletter", "submit", e => {
   e.preventDefault();
   const input = document.getElementById("newsletterEmail");
   if (!input.checkValidity()) {
@@ -150,6 +156,6 @@ document.getElementById("newsletter").addEventListener("submit", e => {
   input.value = "";
 });
 
-document.getElementById("rescheduleModal").addEventListener("click", e => {
+onElement("rescheduleModal", "click", e => {
   if (e.target.id === "rescheduleModal") closeModal();
 });

@@ -8,21 +8,39 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
+import com.example.demo.model.CheckoutBatch;
 import java.util.List;
 import java.util.Optional;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
-    Optional<Order> findByOrderCode(String orderCode);
+        
+        Optional<Order> findByOrderCode(String orderCode);
 
-    List<Order> findByBuyerOrderByCreatedAtDesc(User buyer);
-    List<Order> findByBuyerIdOrderByCreatedAtDesc(Long buyerId);
-    List<Order> findTop5ByBuyerIdOrderByCreatedAtDesc(Long buyerId);
+        Optional<Order> findFirstByCheckoutOrderByCreatedAtDesc(CheckoutBatch checkout);
 
-    List<Order> findBySellerOrderByCreatedAtDesc(User seller);
+        @Lock(LockModeType.PESSIMISTIC_WRITE)
+        @Query("SELECT o FROM Order o WHERE o.id = :id")
+        Optional<Order> findByIdForUpdate(@Param("id") Long id);
 
-    List<Order> findBySellerAndStatusOrderByCreatedAtDesc(User seller, OrderStatus status);
+        @Lock(LockModeType.PESSIMISTIC_WRITE)
+        @Query("""
+                SELECT o FROM Order o
+                WHERE o.checkout.id = :checkoutId
+                """)
+        Optional<Order> findByCheckoutIdForUpdate(
+                @Param("checkoutId") Long checkoutId
+        );
+        
+        List<Order> findByBuyerOrderByCreatedAtDesc(User buyer);
+        List<Order> findByBuyerIdOrderByCreatedAtDesc(Long buyerId);
+        List<Order> findTop5ByBuyerIdOrderByCreatedAtDesc(Long buyerId);
+
+        List<Order> findBySellerOrderByCreatedAtDesc(User seller);
+
+        List<Order> findBySellerAndStatusOrderByCreatedAtDesc(User seller, OrderStatus status);
 
     /**
      * Toàn bộ đơn hàng của sàn cho Admin Console (kèm tên người mua / người bán).
