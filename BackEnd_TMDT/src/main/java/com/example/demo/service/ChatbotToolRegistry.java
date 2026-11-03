@@ -8,6 +8,7 @@ import com.example.demo.dto.catalog.CategoryResponse;
 import com.example.demo.dto.product.PageResponse;
 import com.example.demo.dto.product.ProductResponse;
 import com.example.demo.exception.ApiException;
+import com.example.demo.model.enums.ListingType;
 import com.example.demo.security.SecurityUtils;
 import com.example.demo.service.FaqKnowledgeService.FaqEntry;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -52,7 +53,8 @@ public class ChatbotToolRegistry {
         Map<String, Object> integer = Map.of("type", "integer");
         Map<String, Object> number = Map.of("type", "number");
         return List.of(
-                function("search_products", "Tìm tối đa 5 sản phẩm đang được công khai trong catalog theo từ khóa và bộ lọc.",
+                function("search_products",
+                        "Tìm tối đa 5 sản phẩm đang được công khai trong catalog theo từ khóa và bộ lọc.",
                         schema(Map.of(
                                 "keyword", string,
                                 "categoryId", integer,
@@ -61,17 +63,17 @@ public class ChatbotToolRegistry {
                                 "minCondition", integer,
                                 "maxCondition", integer,
                                 "sortBy", Map.of("type", "string", "enum", List.of("newest", "price")),
-                                "direction", Map.of("type", "string", "enum", List.of("asc", "desc"))
-                        ), List.of())),
+                                "direction", Map.of("type", "string", "enum", List.of("asc", "desc"))), List.of())),
                 function("get_product_details", "Lấy chi tiết một sản phẩm đang được công khai bằng ID catalog.",
                         schema(Map.of("id", integer), List.of("id"))),
                 function("get_categories", "Liệt kê các danh mục sản phẩm hiện có.",
                         schema(Map.of(), List.of())),
-                function("lookup_my_orders", "Tra cứu tối đa 5 đơn gần nhất của người dùng đang xác thực; không nhận user ID.",
+                function("lookup_my_orders",
+                        "Tra cứu tối đa 5 đơn gần nhất của người dùng đang xác thực; không nhận user ID.",
                         schema(Map.of(), List.of())),
-                function("search_faq", "Tìm câu trả lời trong kho nội dung ComicWorm đã xác minh; nếu không có kết quả thì nói rõ chưa có thông tin.",
-                        schema(Map.of("query", string), List.of("query")))
-        );
+                function("search_faq",
+                        "Tìm câu trả lời trong kho nội dung ComicWorm đã xác minh; nếu không có kết quả thì nói rõ chưa có thông tin.",
+                        schema(Map.of("query", string), List.of("query"))));
     }
 
     private ChatbotToolResult searchProducts(JsonNode arguments) {
@@ -106,9 +108,22 @@ public class ChatbotToolRegistry {
         PageResponse<ProductResponse> page;
         try {
             page = productService.getProducts(
-                    keyword, categoryId, minPrice, maxPrice, minCondition, maxCondition,
-                    null, null, 0, PRODUCT_RESULT_LIMIT, sortBy, direction
+                    keyword, // 1. Từ khóa
+                    categoryId, // 2. ID danh mục
+                    null, // 3. ID nhà xuất bản
+                    null, // 4. Loại tình trạng sách
+                    minPrice, // 5. Giá thấp nhất
+                    maxPrice, // 6. Giá cao nhất
+                    minCondition, // 7. Tình trạng thấp nhất
+                    maxCondition, // 8. Tình trạng cao nhất
+                    null, // 9. Tên người bán
+                    null, // 10. Loại tin đăng
+                    0, // 11. Trang đầu tiên
+                    PRODUCT_RESULT_LIMIT, // 12. Tối đa 5 sản phẩm
+                    sortBy, // 13. Sắp xếp
+                    direction // 14. Chiều sắp xếp
             );
+
         } catch (ApiException exception) {
             if (exception.getStatus() == HttpStatus.NOT_FOUND) {
                 return ChatbotToolResult.text("Không tìm thấy danh mục hoặc sản phẩm phù hợp.");
@@ -152,8 +167,7 @@ public class ChatbotToolRegistry {
                         "Cần đăng nhập bằng tài khoản đã đặt hàng để tra cứu đơn.",
                         List.of(),
                         List.of(),
-                        true
-                );
+                        true);
             }
             throw exception;
         }
@@ -170,15 +184,15 @@ public class ChatbotToolRegistry {
         }
         List<FaqEntry> entries = faqKnowledgeService.search(query);
         return entries.isEmpty()
-                ? ChatbotToolResult.text("Không có câu trả lời đã xác minh cho chủ đề này. Hãy nói rõ là chưa có thông tin chính thức.")
+                ? ChatbotToolResult.text(
+                        "Không có câu trả lời đã xác minh cho chủ đề này. Hãy nói rõ là chưa có thông tin chính thức.")
                 : new ChatbotToolResult(
                         toJson(entries),
                         List.of(),
                         entries.stream()
                                 .map(entry -> new ChatbotLink(entry.question(), entry.url()))
                                 .toList(),
-                        false
-                );
+                        false);
     }
 
     private ChatbotProductCard toCard(ProductResponse product) {
@@ -192,8 +206,7 @@ public class ChatbotToolRegistry {
                 product.getStockQuantity(),
                 product.getConditionPercent(),
                 imageUrl,
-                "/tin/html/product_details.html?id=" + product.getId()
-        );
+                "/tin/html/product_details.html?id=" + product.getId());
     }
 
     private JsonNode parseArguments(String rawArguments) {
@@ -201,7 +214,8 @@ public class ChatbotToolRegistry {
             return objectMapper.createObjectNode();
         }
         try {
-            JsonNode arguments = objectMapper.readTree(rawArguments == null || rawArguments.isBlank() ? "{}" : rawArguments);
+            JsonNode arguments = objectMapper
+                    .readTree(rawArguments == null || rawArguments.isBlank() ? "{}" : rawArguments);
             return arguments != null && arguments.isObject() ? arguments : objectMapper.createObjectNode();
         } catch (JsonProcessingException exception) {
             return objectMapper.createObjectNode();
@@ -210,32 +224,37 @@ public class ChatbotToolRegistry {
 
     private String text(JsonNode arguments, String name, int maximumLength) {
         JsonNode value = arguments.get(name);
-        if (value == null || !value.isTextual()) return null;
+        if (value == null || !value.isTextual())
+            return null;
         String text = value.asText().trim();
         return text.length() <= maximumLength ? text : text.substring(0, maximumLength);
     }
 
     private Integer integer(JsonNode arguments, String name) {
         JsonNode value = arguments.get(name);
-        if (value == null || !value.canConvertToInt()) return null;
+        if (value == null || !value.canConvertToInt())
+            return null;
         return value.intValue();
     }
 
     private Long longValue(JsonNode arguments, String name) {
         JsonNode value = arguments.get(name);
-        if (value == null || !value.canConvertToLong()) return null;
+        if (value == null || !value.canConvertToLong())
+            return null;
         return value.longValue();
     }
 
     private BigDecimal decimal(JsonNode arguments, String name) {
         JsonNode value = arguments.get(name);
-        if (value == null || !value.isNumber()) return null;
+        if (value == null || !value.isNumber())
+            return null;
         return value.decimalValue();
     }
 
     private String enumValue(JsonNode arguments, String name, List<String> allowed, String fallback) {
         String value = text(arguments, name, 20);
-        if (value == null) return fallback;
+        if (value == null)
+            return fallback;
         String normalized = value.toLowerCase(Locale.ROOT);
         return allowed.contains(normalized) ? normalized : fallback;
     }
@@ -264,8 +283,7 @@ public class ChatbotToolRegistry {
         return Map.of("type", "function", "function", Map.of(
                 "name", name,
                 "description", description,
-                "parameters", parameters
-        ));
+                "parameters", parameters));
     }
 
     private Map<String, Object> schema(Map<String, Object> properties, List<String> required) {

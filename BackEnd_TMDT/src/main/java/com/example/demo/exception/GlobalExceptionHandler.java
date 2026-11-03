@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -52,7 +54,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(ApiResponse.fail(ex.getMessage()));
     }
 
-    @ExceptionHandler({BadCredentialsException.class, AuthenticationException.class})
+    @ExceptionHandler({ BadCredentialsException.class, AuthenticationException.class })
     public ResponseEntity<ApiResponse<Void>> handleAuth(Exception ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(ApiResponse.fail("Thông tin đăng nhập chưa chính xác."));
@@ -79,7 +81,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleOther(Exception ex) {
+        log.error("Lỗi hệ thống không xác định:", ex);
+
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.fail("Đã xảy ra lỗi hệ thống."));
     }
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 }

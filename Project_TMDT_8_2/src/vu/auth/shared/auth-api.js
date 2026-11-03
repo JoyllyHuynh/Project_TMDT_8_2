@@ -69,6 +69,11 @@ export function resetPassword(token, password) {
         body: { token, password }
     });
 }
+export function validateResetToken(token) {
+    return apiRequest(
+        `/api/auth/validate-reset-token?token=${encodeURIComponent(token)}`
+    );
+}
 
 export async function getCurrentUser() {
     const result = await apiRequest("/api/auth/me");

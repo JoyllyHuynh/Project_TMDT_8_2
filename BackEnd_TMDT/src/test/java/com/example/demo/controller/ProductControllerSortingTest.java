@@ -1,3 +1,4 @@
+
 package com.example.demo.controller;
 
 import com.example.demo.dto.product.PageResponse;
@@ -9,6 +10,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.mockito.ArgumentCaptor;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,10 +31,17 @@ class ProductControllerSortingTest {
     @BeforeEach
     void setUp() {
         productService = mock(ProductService.class);
-        mockMvc = MockMvcBuilders.standaloneSetup(new ProductController(productService)).build();
+
+        mockMvc = MockMvcBuilders
+                .standaloneSetup(new ProductController(productService))
+                .build();
+
         when(productService.getProducts(
-                any(), any(), any(), any(), any(), any(), any(), any(),
-                anyInt(), anyInt(), anyString(), anyString()
+                any(), any(), any(), any(),
+                any(), any(), any(), any(),
+                any(), any(),
+                anyInt(), anyInt(),
+                anyString(), anyString()
         )).thenReturn(PageResponse.<ProductResponse>builder()
                 .content(List.of())
                 .page(0)
@@ -59,22 +68,34 @@ class ProductControllerSortingTest {
         var direction = ArgumentCaptor.forClass(String.class);
         var keyword = ArgumentCaptor.forClass(String.class);
         var categoryId = ArgumentCaptor.forClass(Integer.class);
-        var minPrice = ArgumentCaptor.forClass(java.math.BigDecimal.class);
-        var maxPrice = ArgumentCaptor.forClass(java.math.BigDecimal.class);
+        var minPrice = ArgumentCaptor.forClass(BigDecimal.class);
+        var maxPrice = ArgumentCaptor.forClass(BigDecimal.class);
         var page = ArgumentCaptor.forClass(Integer.class);
         var pageSize = ArgumentCaptor.forClass(Integer.class);
+
         verify(productService).getProducts(
-                keyword.capture(), categoryId.capture(), minPrice.capture(), maxPrice.capture(),
-                any(), any(), any(), any(), page.capture(), pageSize.capture(),
-                sort.capture(), direction.capture()
+                keyword.capture(),
+                categoryId.capture(),
+                any(),
+                any(),
+                minPrice.capture(),
+                maxPrice.capture(),
+                any(),
+                any(),
+                any(),
+                any(),
+                page.capture(),
+                pageSize.capture(),
+                sort.capture(),
+                direction.capture()
         );
 
         assertEquals("price", sort.getValue());
         assertEquals("asc", direction.getValue());
         assertEquals("Naruto", keyword.getValue());
         assertEquals(3, categoryId.getValue());
-        assertEquals(new java.math.BigDecimal("35000"), minPrice.getValue());
-        assertEquals(new java.math.BigDecimal("80000"), maxPrice.getValue());
+        assertEquals(new BigDecimal("35000"), minPrice.getValue());
+        assertEquals(new BigDecimal("80000"), maxPrice.getValue());
         assertEquals(0, page.getValue());
         assertEquals(5, pageSize.getValue());
     }
@@ -90,9 +111,13 @@ class ProductControllerSortingTest {
 
         var sort = ArgumentCaptor.forClass(String.class);
         var direction = ArgumentCaptor.forClass(String.class);
+
         verify(productService).getProducts(
-                any(), any(), any(), any(), any(), any(), any(), any(),
-                anyInt(), anyInt(), sort.capture(), direction.capture()
+                any(), any(), any(), any(),
+                any(), any(), any(), any(),
+                any(), any(),
+                anyInt(), anyInt(),
+                sort.capture(), direction.capture()
         );
 
         assertEquals("price", sort.getValue());
@@ -108,9 +133,13 @@ class ProductControllerSortingTest {
 
         var sort = ArgumentCaptor.forClass(String.class);
         var direction = ArgumentCaptor.forClass(String.class);
+
         verify(productService).getProducts(
-                any(), any(), any(), any(), any(), any(), any(), any(),
-                anyInt(), anyInt(), sort.capture(), direction.capture()
+                any(), any(), any(), any(),
+                any(), any(), any(), any(),
+                any(), any(),
+                anyInt(), anyInt(),
+                sort.capture(), direction.capture()
         );
 
         assertEquals("price", sort.getValue());

@@ -45,8 +45,7 @@ class ChatbotToolRegistryTest {
                 catalogService,
                 orderService,
                 faqKnowledgeService,
-                new ObjectMapper()
-        );
+                new ObjectMapper());
     }
 
     @AfterEach
@@ -65,14 +64,28 @@ class ChatbotToolRegistryTest {
                 .imageUrls(List.of())
                 .build();
         when(productService.getProducts(
-                eq("Naruto"), isNull(), isNull(), isNull(), isNull(), isNull(),
-                isNull(), isNull(), eq(0), eq(5), eq("price"), eq("asc")
-        )).thenReturn(PageResponse.<ProductResponse>builder().content(List.of(product)).build());
+                eq("Naruto"), // keyword
+                isNull(), // categoryId
+                isNull(), // publisherId
+                isNull(), // conditionType
+                isNull(), // minPrice
+                isNull(), // maxPrice
+                isNull(), // minCondition
+                isNull(), // maxCondition
+                isNull(), // sellerName
+                isNull(), // listingType
+                eq(0), // page
+                eq(5), // pageSize
+                eq("price"), // sort
+                eq("asc") // direction
+        )).thenReturn(
+                PageResponse.<ProductResponse>builder()
+                        .content(List.of(product))
+                        .build());
 
         var result = toolRegistry.execute(
                 "search_products",
-                "{\"keyword\":\"Naruto\",\"sortBy\":\"price\",\"direction\":\"asc\"}"
-        );
+                "{\"keyword\":\"Naruto\",\"sortBy\":\"price\",\"direction\":\"asc\"}");
 
         assertEquals(1, result.products().size());
         assertEquals(44L, result.products().get(0).id());
@@ -84,8 +97,7 @@ class ChatbotToolRegistryTest {
     void rejectsInvalidPriceRangeBeforeQueryingProducts() {
         var result = toolRegistry.execute(
                 "search_products",
-                "{\"minPrice\":75000,\"maxPrice\":35000}"
-        );
+                "{\"minPrice\":75000,\"maxPrice\":35000}");
 
         assertTrue(result.content().contains("không hợp lệ"));
         verifyNoInteractions(productService);
@@ -116,8 +128,7 @@ class ChatbotToolRegistryTest {
         user.setAccountStatus(AccountStatus.ACTIVE);
         UserPrincipal principal = new UserPrincipal(user);
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities())
-        );
+                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
         when(orderService.getChatbotOrderSummaries()).thenReturn(List.of());
 
         var result = toolRegistry.execute("lookup_my_orders", "{\"userId\":1}");

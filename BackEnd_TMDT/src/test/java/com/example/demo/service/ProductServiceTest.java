@@ -1,3 +1,4 @@
+
 package com.example.demo.service;
 
 import com.example.demo.exception.ApiException;
@@ -47,10 +48,12 @@ class ProductServiceTest {
     @BeforeEach
     void setUp() {
         SecurityContextHolder.clearContext();
+
         productRepository = mock(ProductRepository.class);
         productImageRepository = mock(ProductImageRepository.class);
         categoryRepository = mock(CategoryRepository.class);
         userRepository = mock(UserRepository.class);
+
         productService = new ProductService(
                 productRepository,
                 productImageRepository,
@@ -63,37 +66,72 @@ class ProductServiceTest {
 
     @Test
     void publicProductListUsesApprovedActiveFilterAndWhitelistedSort() {
+
         when(productRepository.search(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)
-        )).thenAnswer(invocation -> Page.empty(invocation.getArgument(10)));
+                any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(),
+                any(Pageable.class)
+        )).thenAnswer(invocation ->
+                Page.empty(invocation.getArgument(11))
+        );
 
         var result = productService.getProducts(
-                null, null, null, null, null, null, null, null, 0, 12, "newest", "desc"
+                null, null, null, null,
+                null, null, null, null,
+                null, null,
+                0, 12, "newest", "desc"
         );
 
         assertEquals(0, result.getTotalElements());
         assertEquals(12, result.getPageSize());
+
         var active = org.mockito.ArgumentCaptor.forClass(Boolean.class);
-        var moderationStatus = org.mockito.ArgumentCaptor.forClass(ModerationStatus.class);
-        var pageable = org.mockito.ArgumentCaptor.forClass(Pageable.class);
+        var moderationStatus =
+                org.mockito.ArgumentCaptor.forClass(ModerationStatus.class);
+        var pageable =
+                org.mockito.ArgumentCaptor.forClass(Pageable.class);
+
         verify(productRepository).search(
-                any(), any(), any(), any(), any(), any(), any(), any(), active.capture(),
-                moderationStatus.capture(), pageable.capture()
+                any(), any(), any(), any(), any(),
+                any(), any(), any(), any(),
+                active.capture(),
+                moderationStatus.capture(),
+                pageable.capture()
         );
+
         assertTrue(active.getValue());
         assertEquals(ModerationStatus.APPROVED, moderationStatus.getValue());
-        assertEquals(Sort.Direction.DESC, pageable.getValue().getSort().getOrderFor("createdAt").getDirection());
-        assertEquals(Sort.Direction.ASC, pageable.getValue().getSort().getOrderFor("id").getDirection());
+
+        assertEquals(
+                Sort.Direction.DESC,
+                pageable.getValue().getSort()
+                        .getOrderFor("createdAt").getDirection()
+        );
+
+        assertEquals(
+                Sort.Direction.ASC,
+                pageable.getValue().getSort()
+                        .getOrderFor("id").getDirection()
+        );
     }
 
     @Test
     void rejectsUnknownSortAndInvalidPriceRangeBeforeQuery() {
+
         assertThrows(ApiException.class, () -> productService.getProducts(
-                null, null, null, null, null, null, null, null, 0, 12, "price;delete", "desc"
+                null, null, null, null,
+                null, null, null, null,
+                null, null,
+                0, 12, "price;delete", "desc"
         ));
+
         assertThrows(ApiException.class, () -> productService.getProducts(
-                null, null, new BigDecimal("10"), new BigDecimal("5"),
-                null, null, null, null, 0, 12, "newest", "desc"
+                null, null, null, null,
+                new BigDecimal("10"),
+                new BigDecimal("5"),
+                null, null,
+                null, null,
+                0, 12, "newest", "desc"
         ));
 
         verifyNoInteractions(productRepository);
@@ -101,47 +139,87 @@ class ProductServiceTest {
 
     @Test
     void appliesPriceSortDirectionToRepositoryPageable() {
+
         when(categoryRepository.existsById(3)).thenReturn(true);
+
         when(productRepository.search(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(Pageable.class)
-        )).thenAnswer(invocation -> Page.empty(invocation.getArgument(10)));
-
-        productService.getProducts(
-                "Naruto", 3, new BigDecimal("35000"), new BigDecimal("80000"),
-                null, null, null, null, 1, 5, "price", "asc"
-        );
-        productService.getProducts(
-                "Naruto", 3, new BigDecimal("35000"), new BigDecimal("80000"),
-                null, null, null, null, 1, 5, "price", "desc"
+                any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(),
+                any(Pageable.class)
+        )).thenAnswer(invocation ->
+                Page.empty(invocation.getArgument(11))
         );
 
-        var pageable = org.mockito.ArgumentCaptor.forClass(Pageable.class);
+        productService.getProducts(
+                "Naruto", 3, null, null,
+                new BigDecimal("35000"),
+                new BigDecimal("80000"),
+                null, null,
+                null, null,
+                1, 5, "price", "asc"
+        );
+
+        productService.getProducts(
+                "Naruto", 3, null, null,
+                new BigDecimal("35000"),
+                new BigDecimal("80000"),
+                null, null,
+                null, null,
+                1, 5, "price", "desc"
+        );
+
+        var pageable =
+                org.mockito.ArgumentCaptor.forClass(Pageable.class);
+
         verify(productRepository, times(2)).search(
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), pageable.capture()
+                any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(),
+                any(), pageable.capture()
         );
+
         var pages = pageable.getAllValues();
 
-        assertEquals(Sort.Direction.ASC, pages.get(0).getSort().getOrderFor("price").getDirection());
-        assertEquals(Sort.Direction.DESC, pages.get(1).getSort().getOrderFor("price").getDirection());
+        assertEquals(
+                Sort.Direction.ASC,
+                pages.get(0).getSort().getOrderFor("price").getDirection()
+        );
+
+        assertEquals(
+                Sort.Direction.DESC,
+                pages.get(1).getSort().getOrderFor("price").getDirection()
+        );
+
         assertEquals(1, pages.get(0).getPageNumber());
         assertEquals(5, pages.get(0).getPageSize());
+
         assertEquals(1, pages.get(1).getPageNumber());
         assertEquals(5, pages.get(1).getPageSize());
     }
 
     @Test
     void doesNotExposePendingProductDetails() {
+
         Product product = new Product();
         product.setActive(true);
         product.setModerationStatus(ModerationStatus.PENDING);
-        when(productRepository.findByIdAndDeletedAtIsNull(7L)).thenReturn(Optional.of(product));
 
-        assertThrows(ApiException.class, () -> productService.getProduct(7L));
+        when(productRepository.findByIdAndDeletedAtIsNull(7L))
+                .thenReturn(Optional.of(product));
+
+        assertThrows(
+                ApiException.class,
+                () -> productService.getProduct(7L)
+        );
     }
 
     @Test
     void privateSellerListingRequiresAuthentication() {
-        assertThrows(ApiException.class, () -> productService.getMyProducts());
+
+        assertThrows(
+                ApiException.class,
+                () -> productService.getMyProducts()
+        );
+
         verifyNoInteractions(productRepository, userRepository);
     }
 

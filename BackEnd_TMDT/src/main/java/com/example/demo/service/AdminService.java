@@ -225,12 +225,13 @@ public class AdminService {
             Integer size
     ) {
         Page<Product> products = productRepository.search(
-                normalize(keyword),
-                null, null, null, null, null, null, null,
-                active,
-                moderationStatus,
-                pageRequest(page, size)
-        );
+        normalize(keyword),
+        null, null, null, null, null, null, null,
+        null,           // sellerName
+        active,
+        moderationStatus,
+        pageRequest(page, size)
+);
         return PageResponse.from(products, this::toProductResponse);
     }
 

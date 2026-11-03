@@ -18,58 +18,82 @@ import java.util.Optional;
 
 public interface ProductRepository extends JpaRepository<Product, Long> {
 
-    Optional<Product> findByIdAndDeletedAtIsNull(Long id);
+        Optional<Product> findByIdAndDeletedAtIsNull(Long id);
+
+        Optional<Product> findBySlugAndDeletedAtIsNull(String slug);
+
         @Lock(LockModeType.PESSIMISTIC_WRITE)
-                @Query("""
-                        SELECT p FROM Product p
-                        WHERE p.id = :id
-                """)
-    Optional<Product> findByIdForUpdate(@Param("id") Long id);
+        @Query("SELECT p FROM Product p WHERE p.id = :id")
+        Optional<Product> findByIdForUpdate(@Param("id") Long id);
 
-    Optional<Product> findBySlugAndDeletedAtIsNull(String slug);
+        boolean existsBySlug(String slug);
 
-    boolean existsBySlug(String slug);
+        List<Product> findBySellerAndDeletedAtIsNullOrderByCreatedAtDesc(User seller);
 
-    List<Product> findBySellerAndDeletedAtIsNullOrderByCreatedAtDesc(User seller);
+        long countByDeletedAtIsNull();
 
-    long countByDeletedAtIsNull();
+        long countByModerationStatusAndDeletedAtIsNull(ModerationStatus moderationStatus);
 
-    long countByModerationStatusAndDeletedAtIsNull(ModerationStatus moderationStatus);
+        long countByActiveAndDeletedAtIsNull(Boolean active);
 
-    long countByActiveAndDeletedAtIsNull(Boolean active);
+        @Query("""
+                                    SELECT p FROM Product p
+                                    LEFT JOIN p.author author
+                                    LEFT JOIN p.publisher publisher
+                                    LEFT JOIN p.seller seller
+                                    WHERE p.deletedAt IS NULL
+                                      AND (:active IS NULL OR p.active = :active)
+                                      AND (:moderationStatus IS NULL OR p.moderationStatus = :moderationStatus)
+                                     AND (:categoryId IS NULL OR p.category.id = :categoryId)
+                        AND (:publisherId IS NULL OR publisher.id = :publisherId)
+                        AND (:listingType IS NULL OR p.listingType = :listingType)
+                                      AND (:minPrice IS NULL OR p.price >= :minPrice)
+                                      AND (:maxPrice IS NULL OR p.price <= :maxPrice)
+                                      AND (:minCondition IS NULL OR p.conditionPercent >= :minCondition)
+                                      AND (:maxCondition IS NULL OR p.conditionPercent <= :maxCondition)
+                                      AND (:q IS NULL OR LOWER(p.title) LIKE LOWER(CONCAT('%', :q, '%'))
+                                           OR LOWER(p.description) LIKE LOWER(CONCAT('%', :q, '%'))
+                                           OR LOWER(p.category.name) LIKE LOWER(CONCAT('%', :q, '%'))
+                                           OR LOWER(author.name) LIKE LOWER(CONCAT('%', :q, '%'))
+                                           OR LOWER(publisher.name) LIKE LOWER(CONCAT('%', :q, '%')))
+                                      AND (:sellerName IS NULL OR LOWER(seller.fullName) LIKE LOWER(CONCAT('%', :sellerName, '%')))
+                                    """)
+        Page<Product> search(
+                        @Param("q") String q,
+                        @Param("categoryId") Integer categoryId,
+                        @Param("publisherId") Integer publisherId,
+                        @Param("listingType") ListingType listingType,
+                        @Param("minPrice") BigDecimal minPrice,
+                        @Param("maxPrice") BigDecimal maxPrice,
+                        @Param("minCondition") Integer minCondition,
+                        @Param("maxCondition") Integer maxCondition,
+                        @Param("sellerName") String sellerName,
+                        @Param("active") Boolean active,
+                        @Param("moderationStatus") ModerationStatus moderationStatus,
+                        Pageable pageable);
 
-    @Query("""
-            SELECT p FROM Product p
-            LEFT JOIN p.author author
-            LEFT JOIN p.publisher publisher
-            LEFT JOIN p.seller seller
-            WHERE p.deletedAt IS NULL
-              AND (:active IS NULL OR p.active = :active)
-              AND (:moderationStatus IS NULL OR p.moderationStatus = :moderationStatus)
-              AND (:categoryId IS NULL OR p.category.id = :categoryId)
-              AND (:listingType IS NULL OR p.listingType = :listingType)
-              AND (:minPrice IS NULL OR p.price >= :minPrice)
-              AND (:maxPrice IS NULL OR p.price <= :maxPrice)
-              AND (:minCondition IS NULL OR p.conditionPercent >= :minCondition)
-              AND (:maxCondition IS NULL OR p.conditionPercent <= :maxCondition)
-              AND (:q IS NULL OR LOWER(p.title) LIKE LOWER(CONCAT('%', :q, '%'))
-                   OR LOWER(p.description) LIKE LOWER(CONCAT('%', :q, '%'))
-                   OR LOWER(p.category.name) LIKE LOWER(CONCAT('%', :q, '%'))
-                   OR LOWER(author.name) LIKE LOWER(CONCAT('%', :q, '%'))
-                   OR LOWER(publisher.name) LIKE LOWER(CONCAT('%', :q, '%')))
-              AND (:sellerName IS NULL OR LOWER(seller.fullName) LIKE LOWER(CONCAT('%', :sellerName, '%')))
-            """)
-    Page<Product> search(
-            @Param("q") String q,
-            @Param("categoryId") Integer categoryId,
-            @Param("listingType") ListingType listingType,
-            @Param("minPrice") BigDecimal minPrice,
-            @Param("maxPrice") BigDecimal maxPrice,
-            @Param("minCondition") Integer minCondition,
-            @Param("maxCondition") Integer maxCondition,
-            @Param("sellerName") String sellerName,
-            @Param("active") Boolean active,
-            @Param("moderationStatus") ModerationStatus moderationStatus,
-            Pageable pageable
-    );
+        @Query("""
+                        SELECT p FROM Product p, Product current
+                        WHERE current.id = :productId
+                          AND p.id <> current.id
+                          AND p.deletedAt IS NULL
+                          AND p.active = true
+                          AND p.moderationStatus = :moderationStatus
+                          AND (
+                              (current.author IS NOT NULL AND p.author.id = current.author.id)
+                              OR p.category.id = current.category.id
+                          )
+                        ORDER BY
+                          CASE
+                              WHEN current.author IS NOT NULL
+                                   AND p.author.id = current.author.id
+                              THEN 0
+                              ELSE 1
+                          END,
+                          p.createdAt DESC
+                        """)
+        Page<Product> findRecommendations(
+                        @Param("productId") Long productId,
+                        @Param("moderationStatus") ModerationStatus moderationStatus,
+                        Pageable pageable);
 }

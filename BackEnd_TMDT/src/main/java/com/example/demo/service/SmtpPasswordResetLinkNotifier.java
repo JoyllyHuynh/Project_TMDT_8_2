@@ -16,9 +16,10 @@ import jakarta.mail.internet.MimeMessage;
 @Slf4j
 @Conditional(ConditionalOnMailConfigured.class)
 public class SmtpPasswordResetLinkNotifier implements PasswordResetLinkNotifier {
-    
 
     private final JavaMailSender mailSender;
+    @Value("${app.auth.password-reset.expiration-minutes:15}")
+    private int expirationMinutes;
 
     @Value("${app.auth.password-reset.from:no-reply@comicworm.local}")
     private String from;
@@ -32,14 +33,15 @@ public class SmtpPasswordResetLinkNotifier implements PasswordResetLinkNotifier 
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, "utf-8");
             helper.setFrom(from);
-            if (replyTo != null && !replyTo.isBlank()) helper.setReplyTo(replyTo);
+            if (replyTo != null && !replyTo.isBlank())
+                helper.setReplyTo(replyTo);
             helper.setTo(email);
             helper.setSubject("Yêu cầu đặt lại mật khẩu - ComicWorm");
 
             String html = "<p>Xin chào,</p>"
                     + "<p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản liên kết với email này.</p>"
                     + "<p>Nhấn vào liên kết bên dưới để đặt lại mật khẩu (liên kết có hiệu lực trong "
-                    + "${app.auth.password-reset.expiration-minutes} phút):</p>"
+                    + expirationMinutes + " phút):</p>"
                     + "<p><a href=\"" + resetUrl + "\">Đặt lại mật khẩu</a></p>"
                     + "<p>Nếu bạn không yêu cầu, có thể bỏ qua email này.</p>"
                     + "<p>— ComicWorm</p>";
