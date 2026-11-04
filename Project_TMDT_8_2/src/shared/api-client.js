@@ -12,19 +12,7 @@ function getAuthToken() {
     return [localSession, temporarySession].find((session) => typeof session?.token === "string")?.token || null;
 }
 
-export async function apiRequest(path, { method = "GET", body } = {}) {
-    const headers = {};
-    if (body !== undefined) headers["Content-Type"] = "application/json";
-
-    const token = getAuthToken();
-    if (token) headers.Authorization = `Bearer ${token}`;
-
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-        method,
-        headers,
-        body: body === undefined ? undefined : JSON.stringify(body)
-    });
-
+async function parseResponse(response) {
     let result;
     try {
         result = await response.json();
@@ -39,4 +27,34 @@ export async function apiRequest(path, { method = "GET", body } = {}) {
     }
 
     return result;
+}
+
+export async function apiRequest(path, { method = "GET", body } = {}) {
+    const headers = {};
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+
+    const token = getAuthToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body)
+    });
+
+    return parseResponse(response);
+}
+
+export async function uploadFile(path, file) {
+    const token = getAuthToken();
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData
+    });
+
+    return parseResponse(response);
 }
