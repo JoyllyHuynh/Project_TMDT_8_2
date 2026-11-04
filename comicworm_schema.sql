@@ -5,9 +5,7 @@
 -- Generated from Nhom8_ChucNang.docx DBML
 -- ============================================================
 
-DROP DATABASE IF EXISTS comicworm;
-
-CREATE DATABASE comicworm
+CREATE DATABASE IF NOT EXISTS comicworm
     CHARACTER SET utf8mb4
     COLLATE utf8mb4_unicode_ci;
 
@@ -337,6 +335,7 @@ CREATE TABLE orders (
 
     subtotal_amount DECIMAL(15,2) NOT NULL,
     shipping_fee DECIMAL(15,2) NOT NULL DEFAULT 0,
+    discount_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
     total_amount DECIMAL(15,2) NOT NULL,
 
     recipient_name VARCHAR(100) NOT NULL,
@@ -352,6 +351,11 @@ CREATE TABLE orders (
     cancelled_at DATETIME,
     stock_released_at DATETIME,
     completed_at DATETIME,
+    dispute_reason TEXT,
+    disputed_at DATETIME,
+    dispute_favor VARCHAR(10),
+    dispute_note TEXT,
+    dispute_resolved_at DATETIME,
 
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -374,7 +378,10 @@ CREATE TABLE orders (
         CHECK (total_amount >= 0),
 
     CONSTRAINT ck_order_total
-        CHECK (total_amount = subtotal_amount + shipping_fee),
+        CHECK (
+            discount_amount >= 0
+            AND total_amount + discount_amount = subtotal_amount + shipping_fee
+        ),
 
     CONSTRAINT ck_order_status
         CHECK (
@@ -398,6 +405,9 @@ CREATE TABLE orders (
                 'REFUNDED'
             )
         ),
+
+    CONSTRAINT ck_order_dispute_favor
+        CHECK (dispute_favor IS NULL OR dispute_favor IN ('BUYER', 'SELLER')),
 
     CONSTRAINT fk_orders_checkout_id
         FOREIGN KEY (checkout_id)

@@ -3,6 +3,7 @@ package com.example.demo.controller;
 import com.example.demo.dto.ApiResponse;
 import com.example.demo.dto.order.CheckoutRequest;
 import com.example.demo.dto.order.OrderResponse;
+import com.example.demo.service.OrderCancellationService;
 import com.example.demo.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,7 @@ import java.util.List;
 public class OrderController {
 
     private final OrderService orderService;
+    private final OrderCancellationService orderCancellationService;
 
     @PostMapping("/buy-now")
     public ResponseEntity<ApiResponse<OrderResponse>> buyNow(@Valid @RequestBody CheckoutRequest request) {
@@ -31,5 +33,11 @@ public class OrderController {
             @RequestParam(required = false) String keyword) {
         List<OrderResponse> orders = orderService.getMyOrders(status, keyword);
         return ResponseEntity.ok(ApiResponse.success("Lấy danh sách đơn hàng thành công!", orders));
+    }
+
+    @PatchMapping("/{id}/cancel")
+    public ResponseEntity<ApiResponse<OrderResponse>> cancelOrder(@PathVariable Long id) {
+        OrderResponse response = orderCancellationService.cancelOrder(id);
+        return ResponseEntity.ok(ApiResponse.success("Hủy đơn hàng thành công!", response));
     }
 }
