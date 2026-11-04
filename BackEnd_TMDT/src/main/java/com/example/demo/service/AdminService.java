@@ -506,18 +506,19 @@ public class AdminService {
         if (order.getStockReleasedAt() != null) {
             return;
         }
-        List<Product> productsToSave = new ArrayList<>();
-        for (OrderItem item : order.getItems()) {
-            Product product = item.getProduct();
-            if (product != null && item.getQuantity() != null) {
-                int currentStock = product.getStockQuantity() == null ? 0 : product.getStockQuantity();
-                product.setStockQuantity(currentStock + item.getQuantity());
-                productsToSave.add(product);
+        List<OrderItem> items = orderItemRepository.findByOrder(order);
+        for (OrderItem item : items) {
+            Product product = productRepository.findByIdForUpdate(item.getProduct().getId())
+                    .orElseThrow(() -> ApiException.notFound(
+                            "Không tìm thấy sản phẩm cần hoàn lại tồn kho."
+                    ));
+            int currentStock = product.getStockQuantity() == null ? 0 : product.getStockQuantity();
+            if (currentStock > Integer.MAX_VALUE - item.getQuantity()) {
+                throw ApiException.badRequest("Số lượng tồn kho vượt giới hạn cho phép.");
             }
+            product.setStockQuantity(currentStock + item.getQuantity());
         }
-        if (!productsToSave.isEmpty()) {
-            productRepository.saveAll(productsToSave);
-        }
+        productRepository.flush();
         order.setStockReleasedAt(LocalDateTime.now());
     }
 

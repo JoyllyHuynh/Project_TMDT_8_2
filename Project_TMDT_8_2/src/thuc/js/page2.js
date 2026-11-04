@@ -6,6 +6,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const emptyMessage = document.getElementById("empty-message");
   const toast = document.getElementById("toast");
   const ordersListEl = document.getElementById("orders-list");
+  const detailPanel = document.getElementById("detail-panel");
 
   let allOrders = [];
   let activeFilter = "all";
@@ -45,6 +46,48 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     }
   }
+
+  async function handleCancelOrder(event) {
+    const button = event.target.closest(".cancel-order-button");
+    if (!button) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const orderId = button.dataset.orderId;
+    const order = allOrders.find(item => String(item.id) === orderId);
+    if (!order || !window.confirm(`Bạn có chắc muốn hủy đơn hàng #${order.orderCode}?`)) return;
+
+    button.disabled = true;
+    try {
+      const response = await apiRequest(`/api/orders/${encodeURIComponent(orderId)}/cancel`, {
+        method: "PATCH"
+      });
+      if (response.data) {
+        allOrders = allOrders.map(item => item.id === response.data.id ? response.data : item);
+        renderOrders(allOrders);
+        updateTabBadges(allOrders);
+      }
+      showToast(`Đã hủy đơn hàng #${order.orderCode}; tồn kho đã được hoàn lại.`);
+    } catch (error) {
+      button.disabled = false;
+      showToast(error.message || "Không thể hủy đơn hàng. Vui lòng thử lại.");
+    }
+  }
+
+  ordersListEl?.addEventListener("click", handleCancelOrder);
+  detailPanel?.addEventListener("click", handleCancelOrder);
+  document.querySelector(".btn-notification")?.addEventListener("click", async () => {
+    try {
+      const response = await apiRequest("/api/notifications/my");
+      const latestNotification = response.data?.[0];
+      showToast(latestNotification
+        ? `${latestNotification.title}: ${latestNotification.content}`
+        : "Bạn chưa có thông báo.");
+    } catch (error) {
+      showToast(error.message || "Không thể tải thông báo.");
+    }
+  });
 
   /* =========================
      2. RENDER ORDERS TO DOM
@@ -116,7 +159,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             <button class="secondary-action remind-button">
               <span class="material-symbols-outlined">chat</span> Nhắc đóng gói
             </button>
-            ${order.status === "WAITING_CONFIRM" ? `<button class="danger-action cancel-button">Hủy yêu cầu</button>` : ""}
+            ${canCancelOrder(order) ? `<button type="button" class="danger-action cancel-order-button" data-order-id="${order.id}">Hủy đơn hàng</button>` : ""}
           </div>
         </div>
       `;
@@ -154,7 +197,6 @@ document.addEventListener("DOMContentLoaded", async () => {
      3. RENDER ORDER DETAIL PANEL
   ========================= */
   function renderOrderDetail(order) {
-    const detailPanel = document.getElementById("detail-panel");
     if (!detailPanel) return;
 
     const firstItem = (order.items && order.items.length > 0) ? order.items[0] : {};
@@ -231,10 +273,13 @@ document.addEventListener("DOMContentLoaded", async () => {
           <span class="material-symbols-outlined">chat</span>
           Nhắc đóng gói
         </button>
-        <a href="page5.html" class="return-button cancel-button" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:6px;">
-          <span class="material-symbols-outlined">assignment_return</span>
-          Yêu cầu Đổi trả / Hủy
-        </a>
+        ${canCancelOrder(order)
+          ? `<button type="button" class="return-button cancel-order-button" data-order-id="${order.id}">
+              <span class="material-symbols-outlined">cancel</span> Hủy đơn hàng
+            </button>`
+          : `<a href="page5.html" class="return-button" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:6px;">
+              <span class="material-symbols-outlined">assignment_return</span> Yêu cầu Đổi trả
+            </a>`}
       </div>
 
       <div class="report-link">
@@ -297,8 +342,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   ========================= */
   function mapStatusToFilter(status) {
     switch (status) {
+      case "WAITING_PAYMENT":
       case "WAITING_CONFIRM": return "pending";
-      case "PROCESSING": return "processing";
+      case "PACKING": return "processing";
       case "SHIPPING": return "shipping";
       case "COMPLETED": return "completed";
       case "CANCELLED": return "cancelled";
@@ -308,13 +354,20 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   function getStatusBadge(status) {
     switch (status) {
+      case "WAITING_PAYMENT": return { text: "Chờ thanh toán", cssClass: "pending", icon: "payments" };
       case "WAITING_CONFIRM": return { text: "Chờ xác nhận", cssClass: "pending", icon: "schedule" };
-      case "PROCESSING": return { text: "Đang xử lý", cssClass: "processing", icon: "inventory_2" };
+      case "PACKING": return { text: "Đang xử lý", cssClass: "processing", icon: "inventory_2" };
       case "SHIPPING": return { text: "Đang giao", cssClass: "shipping", icon: "local_shipping" };
       case "COMPLETED": return { text: "Đã hoàn thành", cssClass: "completed", icon: "check_circle" };
       case "CANCELLED": return { text: "Đã hủy", cssClass: "cancelled", icon: "cancel" };
       default: return { text: status || "Chờ xác nhận", cssClass: "pending", icon: "info" };
     }
+  }
+
+  function canCancelOrder(order) {
+    return order.status === "WAITING_PAYMENT"
+      || order.status === "WAITING_CONFIRM"
+      || order.status === "PACKING";
   }
 
   function updateTabBadges(orders) {

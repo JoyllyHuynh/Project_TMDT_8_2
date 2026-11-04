@@ -500,10 +500,11 @@ async function removeVoucher(field) {
 
 async function submitCheckout(event) {
     event.preventDefault();
-    if (state.submitting || state.submissionSucceeded || state.quotePending || !state.product
-        || !isAddressUsable(state.address)
-        || (!state.quote && !state.checkoutRequestSnapshot)
-        || (state.submissionFingerprint && !state.checkoutRequestSnapshot)) return;
+    const blockedReason = checkoutBlockedReason();
+    if (blockedReason) {
+        showMessage(blockedReason, "error");
+        return;
+    }
 
     const button = document.querySelector(".btn-submit-checkout");
     const selectedPayment = document.querySelector('input[name="payment_method"]:checked')?.value || "vnpay";
@@ -597,7 +598,10 @@ async function submitCheckout(event) {
         });
         const orderCode = response.data?.orderCode;
         state.submissionSucceeded = true;
-        showMessage(`Đặt hàng thành công${orderCode ? `! Mã đơn: ${orderCode}` : "."}`, "success");
+        showMessage(
+            `Đã tạo đơn hàng${orderCode ? ` ${orderCode}` : ""}. Đơn đang chờ thanh toán; giao dịch thanh toán chưa được xác nhận.`,
+            "success"
+        );
         sessionStorage.removeItem("buyNowItem");
         state.buyNowItem = null;
         try {
@@ -605,14 +609,16 @@ async function submitCheckout(event) {
         } catch {
             showMessage("Đơn đã được tạo thành công. Không thể xóa mã voucher tạm đã lưu trên trình duyệt.", "error");
         }
-        window.location.href = "../../thuc/html/page3.html";
+        window.setTimeout(() => {
+            window.location.href = "../../thuc/html/page3.html";
+        }, 1800);
     } catch (error) {
         showMessage(checkoutErrorMessage(error), "error");
     } finally {
         state.submitting = false;
         if (button && !state.submissionSucceeded) {
             const label = button.querySelector("span");
-            if (label) label.textContent = "Xác Nhận Thanh Toán";
+            if (label) label.textContent = "Xác Nhận Đặt Hàng";
         }
         updateCheckoutButton();
     }
@@ -763,11 +769,17 @@ function saveVoucherCodes(codes) {
 
 function updateCheckoutButton() {
     const button = document.querySelector(".btn-submit-checkout");
+    const blockedReason = checkoutBlockedReason();
     if (button) {
-        button.disabled = state.submitting || state.submissionSucceeded || state.quotePending
-            || !state.product || !state.idempotencyKey || !isAddressUsable(state.address)
-            || (!state.quote && !state.checkoutRequestSnapshot)
-            || (state.submissionFingerprint && !state.checkoutRequestSnapshot);
+        button.disabled = Boolean(blockedReason);
+        button.setAttribute("aria-describedby", "checkout-submit-status");
+    }
+
+    const status = document.querySelector("#checkout-submit-status");
+    if (status) {
+        status.textContent = blockedReason || "";
+        status.hidden = !blockedReason;
+        status.className = `checkout-message${blockedReason ? " error" : ""}`;
     }
 
     const applyButton = document.querySelector(".btn-apply-voucher");
@@ -790,6 +802,23 @@ function updateCheckoutButton() {
     document.querySelectorAll(".btn-remove-pill").forEach((button) => {
         button.disabled = state.submitting || state.submissionSucceeded || Boolean(state.submissionFingerprint);
     });
+}
+
+function checkoutBlockedReason() {
+    if (state.submitting) return "Đang gửi yêu cầu tạo đơn hàng...";
+    if (state.submissionSucceeded) return "Đơn hàng đã được tạo.";
+    if (state.quotePending) return "Đang xác nhận báo giá, vui lòng đợi.";
+    if (!state.product || !state.idempotencyKey) return "Đang tải thông tin sản phẩm...";
+    if (!isAddressUsable(state.address)) {
+        return "Vui lòng thêm địa chỉ nhận hàng gồm tên người nhận, số điện thoại và địa chỉ đầy đủ.";
+    }
+    if (!state.quote && !state.checkoutRequestSnapshot) {
+        return "Chưa có báo giá hợp lệ. Vui lòng chờ tải báo giá hoặc thử tải lại trang.";
+    }
+    if (state.submissionFingerprint && !state.checkoutRequestSnapshot) {
+        return "Không thể khôi phục yêu cầu checkout trước đó. Hãy kiểm tra đơn hàng trước khi thử tạo đơn mới.";
+    }
+    return "";
 }
 
 function isAddressUsable(address) {

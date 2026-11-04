@@ -1395,6 +1395,12 @@ img {
     transform: translateY(-1px);
 }
 
+.btn-submit-checkout:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+    box-shadow: none;
+}
+
 .terms-disclaimer {
     margin-top: 10px;
     font-size: 11px;
