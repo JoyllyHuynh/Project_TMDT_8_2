@@ -1,661 +1,839 @@
-/**
- * ============================================================================
- * COMICHUB - TRANG THANH TOÁN BẢO CHỨNG (CHECKOUT LOGIC)
- * ============================================================================
- * File: checkout.js / script.js
- * Mô tả: Quản lý tính toán đơn hàng realtime, thay đổi phương thức vận chuyển/thanh toán,
- *       cập nhật địa chỉ nhận hàng qua Modal, áp dụng Voucher và hoàn tất đặt hàng.
- */
+import { apiRequest } from "../../shared/api-client.js";
 
-document.addEventListener('DOMContentLoaded', () => {
-    'use strict';
+const VOUCHER_STORAGE_KEY = "comichub_checkout_voucher_codes";
 
-    // --------------------------------------------------------------------------
-    // 0. TIỆN ÍCH DÙNG CHUNG: TOAST NOTIFICATION
-    // --------------------------------------------------------------------------
-    /**
-     * Hiển thị thông báo Toast nhanh ở góc dưới màn hình
-     * @param {string} message - Nội dung thông báo
-     * @param {string} type - Loại thông báo: 'success' | 'warning' | 'danger' | 'info' | 'primary'
-     * @param {string} icon - FontAwesome icon class (VD: 'fa-circle-info')
-     */
-    const showToast = (message, type = 'info', icon = 'fa-circle-info') => {
-        let container = document.getElementById('comichub-toast-container');
-        if (!container) {
-            container = document.createElement('div');
-            container.id = 'comichub-toast-container';
-            container.style.cssText = `
-        position: fixed;
-        bottom: 24px;
-        right: 24px;
-        z-index: 99999;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        pointer-events: none;
-      `;
-            document.body.appendChild(container);
-        }
+const state = {
+    productId: null,
+    quantity: null,
+    buyNowItem: null,
+    idempotencyKey: null,
+    submissionFingerprint: null,
+    checkoutRequestSnapshot: null,
+    submissionSucceeded: false,
+    product: null,
+    address: null,
+    voucherCodes: {
+        platformCode: null,
+        sellerCode: null,
+        shippingCode: null
+    },
+    quote: null,
+    quotePayloadFingerprint: null,
+    quoteRequestId: 0,
+    quotePending: false,
+    submitting: false
+};
 
-        const toast = document.createElement('div');
-        const bgColors = {
-            success: '#16a34a',
-            warning: '#f59e0b',
-            danger: '#e11d48',
-            info: '#0f172a',
-            primary: '#f97316'
-        };
+document.addEventListener("DOMContentLoaded", initializeCheckout);
 
-        toast.style.cssText = `
-      background-color: ${bgColors[type] || bgColors.info};
-      color: #ffffff;
-      padding: 12px 18px;
-      border-radius: 12px;
-      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.25);
-      font-size: 13px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      opacity: 0;
-      transform: translateY(20px);
-      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-      pointer-events: auto;
-      max-width: 380px;
-      line-height: 1.4;
-    `;
+async function initializeCheckout() {
+    const checkoutButton = document.querySelector(".btn-submit-checkout");
+    if (checkoutButton) checkoutButton.disabled = true;
+    bindCheckoutControls();
+    updateCheckoutButton();
 
-        toast.innerHTML = `<i class="fa-solid ${icon}" style="font-size: 16px;"></i> <span>${message}</span>`;
-        container.appendChild(toast);
+    const packageCard = document.querySelector(".package-summary-card");
+    if (packageCard) packageCard.innerHTML = `<p role="status">Đang tải sản phẩm...</p>`;
+    const summary = document.querySelector(".summary-breakdown-list");
+    if (summary) summary.innerHTML = `<p role="status">Đang chờ báo giá từ máy chủ...</p>`;
+    const paymentAmount = document.querySelector(".highlight-amount");
+    if (paymentAmount) paymentAmount.textContent = "—";
 
-        requestAnimationFrame(() => {
-            toast.style.opacity = '1';
-            toast.style.transform = 'translateY(0)';
-        });
-
-        setTimeout(() => {
-            toast.style.opacity = '0';
-            toast.style.transform = 'translateY(-10px)';
-            setTimeout(() => toast.remove(), 300);
-        }, 3500);
-    };
-
-    // --------------------------------------------------------------------------
-    // 1. TIỆN ÍCH ĐỊNH DẠNG TIỀN TỆ & KHỞI TẠO STATE ĐƠN HÀNG
-    // --------------------------------------------------------------------------
-    const formatMoney = (amount) => {
-        return new Intl.NumberFormat('vi-VN').format(amount) + '₫';
-    };
-
-    const parseMoney = (moneyStr) => {
-        if (!moneyStr) return 0;
-        return parseInt(moneyStr.replace(/[^\d]/g, ''), 10) || 0;
-    };
-
-    const orderState = {
-        booksSubtotal: 4950000,
-        barterCompensation: 150000,
-        packagingFee: 0,
-        standardShippingOriginal: 35000,
-        expressShippingFee: 45000,
-        shippingMethod: 'standard',
-        voucherBookDiscount: 50000,
-        voucherShipDiscount: 35000,
-        paymentMethod: 'vnpay',
-        orderCode: 'CHUB' + Math.floor(100000 + Math.random() * 900000)
-    };
-
-    // --------------------------------------------------------------------------
-    // 2. TÍNH TOÁN LẠI TỔNG TIỀN ĐƠN HÀNG (LIVE RE-CALCULATION)
-    // --------------------------------------------------------------------------
-    const recalculateOrder = () => {
-        let effectiveShipping = 0;
-        if (orderState.shippingMethod === 'standard') {
-            effectiveShipping = Math.max(0, orderState.standardShippingOriginal - orderState.voucherShipDiscount);
-        } else {
-            effectiveShipping = Math.max(0, orderState.expressShippingFee - orderState.voucherShipDiscount);
-        }
-
-        const totalPayable =
-            orderState.booksSubtotal +
-            orderState.barterCompensation +
-            effectiveShipping -
-            orderState.voucherBookDiscount;
-
-        const subtotalEl = document.querySelector('.summary-subtotal-val, .summary-breakdown-list .breakdown-item:nth-child(1) .item-value');
-        const barterEl = document.querySelector('.summary-barter-val, .summary-breakdown-list .breakdown-item:nth-child(2) .item-value');
-        const shipFeeEl = document.querySelector('.summary-shipping-val, .summary-breakdown-list .breakdown-item:nth-child(4) .item-value');
-        const discountBookEl = document.querySelector('.discount-book-val, .breakdown-item.discount-item:nth-of-type(1) .text-discount');
-        const discountShipEl = document.querySelector('.discount-ship-val, .breakdown-item.discount-item:nth-of-type(2) .text-discount');
-        const grandTotalEl = document.querySelector('.grand-total-amount, .total-price-amount');
-
-        if (subtotalEl) subtotalEl.textContent = formatMoney(orderState.booksSubtotal);
-        if (barterEl) barterEl.textContent = formatMoney(orderState.barterCompensation);
-        if (shipFeeEl) {
-            shipFeeEl.textContent = formatMoney(orderState.shippingMethod === 'standard' ? orderState.standardShippingOriginal : orderState.expressShippingFee);
-        }
-        if (discountBookEl) {
-            discountBookEl.textContent = orderState.voucherBookDiscount > 0 ? `-${formatMoney(orderState.voucherBookDiscount)}` : '-0₫';
-        }
-        if (discountShipEl) {
-            discountShipEl.textContent = orderState.voucherShipDiscount > 0 ? `-${formatMoney(orderState.voucherShipDiscount)}` : '-0₫';
-        }
-        if (grandTotalEl) {
-            grandTotalEl.textContent = formatMoney(Math.max(0, totalPayable));
-        }
-
-        const qrAmountEl = document.querySelector('.highlight-amount, .transfer-amount-value');
-        if (qrAmountEl) {
-            qrAmountEl.textContent = formatMoney(Math.max(0, totalPayable));
-        }
-    };
-
-    // --------------------------------------------------------------------------
-    // 3. XỬ LÝ CHUYỂN ĐỔI PHƯƠNG THỨC VẬN CHUYỂN
-    // --------------------------------------------------------------------------
-    const shippingOptions = document.querySelectorAll('.shipping-option-item, div.border.rounded-xl:has(input[name="shipping_method"])');
-
-    shippingOptions.forEach((option) => {
-        option.addEventListener('click', () => {
-            shippingOptions.forEach((opt) => {
-                opt.classList.remove('selected', 'border-[#F97316]', 'bg-[#FFF7ED]');
-                opt.style.borderColor = '#e2e8f0';
-                opt.style.backgroundColor = '#fafbfc';
-                const radio = opt.querySelector('input[type="radio"]');
-                if (radio) radio.checked = false;
-                const badge = opt.querySelector('.badge-chosen');
-                if (badge) badge.remove();
-            });
-
-            option.classList.add('selected');
-            option.style.borderColor = '#f97316';
-            option.style.backgroundColor = '#fffaf5';
-            const currentRadio = option.querySelector('input[type="radio"]');
-            if (currentRadio) currentRadio.checked = true;
-
-            const isExpress = option.textContent.includes('Hỏa Tốc') || option.textContent.includes('2h') || option.textContent.includes('45.000');
-            orderState.shippingMethod = isExpress ? 'express' : 'standard';
-
-            const titleRow = option.querySelector('.shipping-title-row, div.font-bold');
-            if (titleRow && !titleRow.querySelector('.badge-chosen')) {
-                const badge = document.createElement('span');
-                badge.className = 'badge-chosen ml-2 bg-[#F97316] text-white text-[9px] font-bold px-1.5 py-0.5 rounded';
-                badge.textContent = 'ĐÃ CHỌN';
-                titleRow.appendChild(badge);
-            }
-
-            recalculateOrder();
-            showToast(
-                isExpress
-                    ? 'Đã chuyển sang Hỏa Tốc SafeShip (Giao trong 2h tại nội thành)'
-                    : 'Đã chọn Tiêu Chuẩn Bảo Đảm (Áp dụng mã freeship COMICFREE 0đ)',
-                'info',
-                isExpress ? 'fa-bolt' : 'fa-truck-fast'
-            );
-        });
-    });
-
-    // --------------------------------------------------------------------------
-// 4. XỬ LÝ CHỌN PHƯƠNG THỨC THANH TOÁN (VNPAY-QR VS COD)
-// --------------------------------------------------------------------------
-    const paymentItems = document.querySelectorAll(
-        '.payment-method-item, div.border.rounded-2xl:has(input[name="payment_method"])'
-    );
-
-    const qrBox = document.querySelector(
-        '.qr-payment-details-box, div.bg-slate-50:has(img[alt*="QR"])'
-    );
-
-    const transferCodeEl = document.querySelector(
-        '.transfer-code, span.font-mono.font-bold'
-    );
-
-    if (transferCodeEl) {
-        transferCodeEl.textContent = orderState.orderCode;
+    const rawData = sessionStorage.getItem("buyNowItem");
+    if (!rawData) {
+        showMessage("Không tìm thấy sản phẩm đặt hàng. Vui lòng quay lại trang sản phẩm và chọn Mua Ngay.", "error");
+        return;
     }
 
-    paymentItems.forEach((item) => {
-
-        item.addEventListener('click', (e) => {
-
-            // Không đổi phương thức khi bấm nút copy
-            if (e.target.closest('.btn-copy')) return;
-
-            // Bỏ trạng thái selected của tất cả phương thức
-            paymentItems.forEach((p) => {
-
-                p.classList.remove(
-                    'selected',
-                    'border-[#F97316]',
-                    'bg-[#FFFDFB]'
-                );
-
-                p.style.borderColor = '#e2e8f0';
-                p.style.backgroundColor = '#ffffff';
-
-                const radio = p.querySelector(
-                    'input[name="payment_method"]'
-                );
-
-                if (radio) {
-                    radio.checked = false;
-                }
-            });
-
-            // Đánh dấu phương thức đang chọn
-            item.classList.add('selected');
-            item.style.borderColor = '#f97316';
-            item.style.backgroundColor = '#fffcf8';
-
-            const curRadio = item.querySelector(
-                'input[name="payment_method"]'
-            );
-
-            if (curRadio) {
-                curRadio.checked = true;
-            }
-
-            // Lấy trực tiếp value của radio để xác định phương thức
-            const paymentValue = curRadio?.value;
-
-            const isVNPAY = paymentValue === 'vnpay';
-
-            // Cập nhật state
-            orderState.paymentMethod = isVNPAY
-                ? 'vnpay'
-                : 'cod';
-
-            // Hiện / ẩn QR
-            if (qrBox) {
-                qrBox.style.display = isVNPAY
-                    ? 'flex'
-                    : 'none';
-            }
-
-            // Thông báo
-            showToast(
-                isVNPAY
-                    ? 'Thanh toán VNPAY-QR: Vui lòng quét mã QR để thanh toán'
-                    : 'Thanh toán COD: Bạn sẽ thanh toán trực tiếp khi nhận hàng & đồng kiểm',
-                'info',
-                isVNPAY
-                    ? 'fa-qrcode'
-                    : 'fa-money-bill-wave'
-            );
-
-        });
-
-    });
-
-    // Sao chép thông tin chuyển khoản (Code chuyển khoản / Số tài khoản)
-    const copyButtons = document.querySelectorAll('.btn-copy, button:has(.fa-copy)');
-    copyButtons.forEach((btn) => {
-        btn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const parentRow = btn.closest('.info-row, div.flex.justify-between');
-            const textToCopy = parentRow?.querySelector('.transfer-code, .info-value, strong')?.textContent.trim() || orderState.orderCode;
-
-            try {
-                if (navigator.clipboard) {
-                    await navigator.clipboard.writeText(textToCopy);
-                }
-                showToast(`Đã sao chép: "${textToCopy}" vào bộ nhớ tạm!`, 'success', 'fa-check');
-            } catch (err) {
-                showToast(`Đã sao chép: "${textToCopy}"`, 'success', 'fa-check');
-            }
-        });
-    });
-
-    // --------------------------------------------------------------------------
-    // 5. THAY ĐỔI ĐỊA CHỈ NHẬN HÀNG SƯU TẦM (MODAL POPUP)
-    // --------------------------------------------------------------------------
-    const btnChangeAddress = document.querySelector('.btn-change-address, button.text-\\[\\#F97316\\]');
-
-    if (btnChangeAddress) {
-        btnChangeAddress.addEventListener('click', () => {
-            const recipientNameEl = document.querySelector('.recipient-name, .address-card strong');
-            const recipientPhoneEl = document.querySelector('.recipient-phone, .address-card span.text-slate-500');
-            const recipientAddressEl = document.querySelector('.recipient-address, .address-card div.text-sm');
-            const deliveryNoteEl = document.querySelector('.collector-delivery-note span, .address-card .note-text');
-
-            const curName = recipientNameEl?.textContent.trim() || 'Nguyễn An Vinh';
-            const curPhone = recipientPhoneEl?.textContent.trim() || '0988.123.456';
-            const curAddr = recipientAddressEl?.textContent.trim() || '124 Hoàng Hoa Thám, Phường Liễu Giai, Quận Ba Đình, Hà Nội';
-            const curNote = deliveryNoteEl?.textContent.replace('Ghi chú lưu kho: ', '').replace(/["']/g, '').trim() || 'Hàng truyện tranh sưu tầm dễ móp gáy, vui lòng nhẹ tay.';
-
-            const modalBackdrop = document.createElement('div');
-            modalBackdrop.id = 'address-edit-modal';
-            modalBackdrop.style.cssText = `
-        position: fixed;
-        inset: 0;
-        background: rgba(15, 23, 42, 0.65);
-        backdrop-filter: blur(4px);
-        z-index: 99999;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 20px;
-        opacity: 0;
-        transition: opacity 0.25s ease;
-      `;
-
-            modalBackdrop.innerHTML = `
-        <div style="
-          background: #ffffff;
-          border-radius: 20px;
-          padding: 28px;
-          max-width: 500px;
-          width: 100%;
-          box-shadow: 0 25px 50px -12px rgba(0,0,0,0.3);
-          transform: translateY(20px);
-          transition: transform 0.25s ease;
-          font-family: inherit;
-        ">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <div style="width: 36px; height: 36px; border-radius: 10px; background: #ffedd5; color: #f97316; display: flex; align-items: center; justify-content: center; font-size: 16px;">
-                <i class="fa-solid fa-location-dot"></i>
-              </div>
-              <div>
-                <h3 style="font-size: 17px; font-weight: 800; color: #0f172a; margin: 0;">Địa Chỉ Nhận Hàng Sưu Tầm</h3>
-                <span style="font-size: 11px; color: #64748b;">Đảm bảo shipper giao tận tay an toàn</span>
-              </div>
-            </div>
-            <button class="btn-close-modal" style="border: none; background: transparent; font-size: 20px; color: #94a3b8; cursor: pointer;">&times;</button>
-          </div>
-
-          <form id="form-update-address" style="display: flex; flex-direction: column; gap: 12px;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-              <div>
-                <label style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">HỌ VÀ TÊN</label>
-                <input type="text" id="input-name" value="${curName}" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px; font-weight: 600; outline: none;">
-              </div>
-              <div>
-                <label style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">SỐ ĐIỆN THOẠI</label>
-                <input type="tel" id="input-phone" value="${curPhone}" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px; font-weight: 600; outline: none;">
-              </div>
-            </div>
-
-            <div>
-              <label style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">ĐỊA CHỈ GIAO HÀNG CHI TIẾT</label>
-              <textarea id="input-addr" rows="2" style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 13px; outline: none; resize: none; font-family: inherit;">${curAddr}</textarea>
-            </div>
-
-            <div>
-              <label style="display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px;">LƯU Ý ĐÓNG GÓI & SHIPPER</label>
-              <input type="text" id="input-note" value="${curNote}" placeholder="Ví dụ: Gọi trước khi giao, kẹp carton cẩn thận..." style="width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 12px; outline: none;">
-            </div>
-
-            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 14px;">
-              <button type="button" class="btn-cancel" style="padding: 9px 18px; border-radius: 9999px; border: 1px solid #e2e8f0; background: #ffffff; color: #64748b; font-weight: 700; font-size: 13px; cursor: pointer;">Hủy bỏ</button>
-              <button type="submit" style="padding: 9px 22px; border-radius: 9999px; border: none; background: #f97316; color: #ffffff; font-weight: 700; font-size: 13px; cursor: pointer; box-shadow: 0 4px 12px rgba(249, 115, 22, 0.35);">Lưu Địa Chỉ Mới</button>
-            </div>
-          </form>
-        </div>
-      `;
-
-            document.body.appendChild(modalBackdrop);
-
-            requestAnimationFrame(() => {
-                modalBackdrop.style.opacity = '1';
-                modalBackdrop.firstElementChild.style.transform = 'translateY(0)';
-            });
-
-            const closeModal = () => {
-                modalBackdrop.style.opacity = '0';
-                modalBackdrop.firstElementChild.style.transform = 'translateY(20px)';
-                setTimeout(() => modalBackdrop.remove(), 250);
-            };
-
-            modalBackdrop.querySelector('.btn-close-modal').addEventListener('click', closeModal);
-            modalBackdrop.querySelector('.btn-cancel').addEventListener('click', closeModal);
-            modalBackdrop.addEventListener('click', (e) => {
-                if (e.target === modalBackdrop) closeModal();
-            });
-
-            modalBackdrop.querySelector('#form-update-address').addEventListener('submit', (e) => {
-                e.preventDefault();
-                const newName = modalBackdrop.querySelector('#input-name').value.trim();
-                const newPhone = modalBackdrop.querySelector('#input-phone').value.trim();
-                const newAddr = modalBackdrop.querySelector('#input-addr').value.trim();
-                const newNote = modalBackdrop.querySelector('#input-note').value.trim();
-
-                if (!newName || !newPhone || !newAddr) {
-                    showToast('Vui lòng điền đủ Tên, SĐT và Địa chỉ nhận hàng!', 'warning', 'fa-triangle-exclamation');
-                    return;
-                }
-
-                if (recipientNameEl) recipientNameEl.textContent = newName;
-                if (recipientPhoneEl) recipientPhoneEl.textContent = newPhone;
-                if (recipientAddressEl) recipientAddressEl.textContent = newAddr;
-                if (deliveryNoteEl) {
-                    deliveryNoteEl.textContent = `Ghi chú lưu kho: "${newNote || 'Hàng truyện tranh sưu tầm dễ móp gáy, vui lòng nhẹ tay.'}"`;
-                }
-
-                closeModal();
-                showToast('Đã cập nhật địa chỉ giao hàng thành công!', 'success', 'fa-map-pin');
-            });
-        });
+    let buyNowItem;
+    try {
+        buyNowItem = JSON.parse(rawData);
+    } catch {
+        showMessage("Thông tin sản phẩm đặt hàng không hợp lệ. Vui lòng chọn Mua Ngay lại.", "error");
+        return;
     }
 
-    // --------------------------------------------------------------------------
-    // 6. QUẢN LÝ MÃ GIẢM GIÁ / VOUCHER CHECKOUT
-    // --------------------------------------------------------------------------
-    const voucherField = document.querySelector('.voucher-field, input[placeholder*="voucher"]');
-    const btnApplyVoucher = document.querySelector('.btn-apply-voucher, button.btn-voucher');
-    const appliedContainer = document.querySelector('.applied-vouchers-group, #applied-vouchers-container');
+    state.productId = Number(buyNowItem.productId);
+    state.quantity = Number(buyNowItem.quantity);
+    if (!Number.isSafeInteger(state.productId) || state.productId < 1
+        || !Number.isSafeInteger(state.quantity) || state.quantity < 1) {
+        showMessage("Thông tin sản phẩm hoặc số lượng không hợp lệ.", "error");
+        return;
+    }
 
-    const validVouchersCheckout = {
-        'OTAKU50K': { discount: 50000, type: 'book', name: 'OTAKU50K (-50k)' },
-        'COMICFREE': { discount: 35000, type: 'shipping', name: 'COMICFREE (-35k)' },
-        'MANGA100K': { discount: 100000, type: 'book', name: 'MANGA100K (-100k)' },
-        'BARTERSAFE': { discount: 40000, type: 'barter', name: 'BARTERSAFE (-40k)' }
-    };
+    state.buyNowItem = buyNowItem;
+    state.submissionFingerprint = typeof buyNowItem.checkoutRequestFingerprint === "string"
+        ? buyNowItem.checkoutRequestFingerprint
+        : null;
+    try {
+        state.idempotencyKey = ensureIdempotencyKey(buyNowItem);
+    } catch (error) {
+        showMessage(error.message || "Không thể chuẩn bị khóa đặt hàng an toàn.", "error");
+        return;
+    }
 
-    const renderVoucherPill = (code, labelText) => {
-        if (!appliedContainer) return;
-        const existing = Array.from(appliedContainer.querySelectorAll('.applied-voucher-pill')).some((el) => el.textContent.includes(code));
-        if (existing) return;
+    state.checkoutRequestSnapshot = readCheckoutRequestSnapshot(buyNowItem);
+    if (state.submissionFingerprint && !state.checkoutRequestSnapshot) {
+        showMessage(
+            "Checkout trước đó đã được gửi nhưng thiếu dữ liệu an toàn để retry. Hãy kiểm tra đơn hàng trước khi tạo checkout mới.",
+            "error"
+        );
+    }
 
-        const pill = document.createElement('div');
-        pill.className = 'applied-voucher-pill inline-flex items-center gap-1.5 bg-[#FFF7ED] border border-[#FED7AA] text-[#F97316] text-xs font-bold px-2.5 py-1 rounded-full';
-        pill.innerHTML = `
-      <i class="fa-solid fa-ticket text-xs"></i>
-      <span>${labelText}</span>
-      <button type="button" class="btn-remove-pill ml-1 text-slate-400 hover:text-red-500 cursor-pointer" aria-label="Gỡ mã">&times;</button>
-    `;
+    if (state.checkoutRequestSnapshot) {
+        state.quantity = state.checkoutRequestSnapshot.quantity;
+        selectCheckoutOption("shipping_method", state.checkoutRequestSnapshot.shippingMethod);
+        selectCheckoutOption("payment_method", state.checkoutRequestSnapshot.paymentMethod);
+        state.voucherCodes = voucherCodesFromRequest(state.checkoutRequestSnapshot);
+        if (isValidQuote(buyNowItem.checkoutQuote)) {
+            state.quote = buyNowItem.checkoutQuote;
+            state.quotePayloadFingerprint = JSON.stringify(createQuotePayload(
+                state.voucherCodes,
+                state.checkoutRequestSnapshot.shippingMethod,
+                state.quantity
+            ));
+        }
+    } else {
+        state.voucherCodes = readVoucherCodes();
+    }
 
-        pill.querySelector('.btn-remove-pill').addEventListener('click', () => {
-            pill.remove();
-            if (code.includes('OTAKU') || code.includes('MANGA')) {
-                orderState.voucherBookDiscount = 0;
-            } else if (code.includes('FREE')) {
-                orderState.voucherShipDiscount = 0;
-            }
-            recalculateOrder();
-            showToast(`Đã gỡ mã ${code}`, 'info', 'fa-xmark');
-        });
+    try {
+        const response = await apiRequest(`/api/products/${state.productId}`);
+        state.product = response.data;
+        if (!state.product) throw new Error("Không tìm thấy dữ liệu sản phẩm.");
+        renderProduct();
+        updateCheckoutButton();
+    } catch (error) {
+        showMessage(`Không thể tải thông tin sản phẩm: ${error.message || "Vui lòng thử lại."}`, "error");
+        return;
+    }
 
-        appliedContainer.appendChild(pill);
-    };
+    try {
+        const response = await apiRequest("/api/addresses");
+        const addresses = Array.isArray(response.data) ? response.data : [];
+        state.address = state.checkoutRequestSnapshot
+            ? addressFromCheckoutRequest(state.checkoutRequestSnapshot)
+            : addresses.find((address) => address.isDefault) || addresses[0] || null;
+        renderAddress();
+    } catch (error) {
+        showMessage(
+            error.status === 401
+                ? "Phiên đăng nhập đã hết hạn hoặc bạn chưa đăng nhập. Vui lòng đăng nhập lại."
+                : `Không thể tải địa chỉ nhận hàng: ${error.message || "Vui lòng thử lại."}`,
+            "error"
+        );
+    }
 
-    const applyVoucherCheckout = (code) => {
-        const clean = code.trim().toUpperCase();
-        if (!clean) {
-            showToast('Vui lòng nhập mã voucher trước khi áp dụng!', 'warning', 'fa-triangle-exclamation');
+    try {
+        await refreshQuote(state.voucherCodes, false);
+    } catch (error) {
+        if (state.checkoutRequestSnapshot) {
+            showMessage(
+                `Không thể làm mới báo giá cho lần retry; yêu cầu gốc và idempotency key vẫn được giữ nguyên. ${error.message || ""}`.trim(),
+                "error"
+            );
+            renderQuote();
+            updateCheckoutButton();
             return;
         }
 
-        if (validVouchersCheckout[clean]) {
-            const v = validVouchersCheckout[clean];
-            if (v.type === 'book') {
-                orderState.voucherBookDiscount = v.discount;
-            } else if (v.type === 'shipping') {
-                orderState.voucherShipDiscount = v.discount;
+        const candidateCodes = Object.entries(state.voucherCodes).find(([, code]) => code);
+        if (candidateCodes) {
+            const [field, code] = candidateCodes;
+            document.querySelector("#coupon-code").value = code;
+            document.querySelector("#voucher-type").value = field;
+            state.voucherCodes = emptyVoucherCodes();
+            saveVoucherCodes(state.voucherCodes);
+            renderAppliedVouchers();
+            showMessage(`Mã đã chọn chưa được xác nhận: ${error.message || "Vui lòng kiểm tra lại mã."}`, "error");
+            try {
+                await refreshQuote(state.voucherCodes, false);
+            } catch (quoteError) {
+                showMessage(`Không thể tính đơn hàng: ${quoteError.message || "Vui lòng thử lại."}`, "error");
             }
-
-            renderVoucherPill(clean, v.name);
-            recalculateOrder();
-            if (voucherField) voucherField.value = '';
-            showToast(`Áp dụng mã "${clean}" thành công!`, 'success', 'fa-ticket');
         } else {
-            showToast(`Mã voucher "${clean}" không tồn tại hoặc không đủ điều kiện!`, 'danger', 'fa-circle-exclamation');
+            showMessage(`Không thể tính đơn hàng: ${error.message || "Vui lòng thử lại."}`, "error");
         }
-    };
-
-    if (btnApplyVoucher) {
-        btnApplyVoucher.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (voucherField) applyVoucherCheckout(voucherField.value);
-        });
     }
+}
 
-    if (voucherField) {
-        voucherField.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                applyVoucherCheckout(voucherField.value);
-            }
-        });
-    }
+function bindCheckoutControls() {
+    const applyButton = document.querySelector(".btn-apply-voucher");
+    const voucherInput = document.querySelector("#coupon-code");
+    const checkoutButton = document.querySelector(".btn-submit-checkout");
 
-    // Xử lý sự kiện gỡ Voucher có sẵn trên giao diện
-    const existingPills = document.querySelectorAll('.applied-voucher-pill');
-    existingPills.forEach((pill) => {
-        const btnRemove = pill.querySelector('.btn-remove-pill');
-        if (btnRemove) {
-            btnRemove.addEventListener('click', () => {
-                const text = pill.textContent;
-                pill.remove();
-                if (text.includes('OTAKU50K')) orderState.voucherBookDiscount = 0;
-                if (text.includes('COMICFREE')) orderState.voucherShipDiscount = 0;
-                recalculateOrder();
-                showToast('Đã gỡ bỏ mã giảm giá', 'info', 'fa-xmark');
-            });
+    applyButton?.addEventListener("click", applyVoucher);
+    voucherInput?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            applyVoucher();
         }
     });
 
-    const voucherExploreLink = document.querySelector('.voucher-explore-link, a[href*="voucher"]');
-    if (voucherExploreLink) {
-        voucherExploreLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            showToast('Đang chuyển hướng đến Kho Voucher ComicHub...', 'primary', 'fa-ticket');
-            setTimeout(() => {
-                window.location.href = 'voucher.html';
-            }, 500);
+    document.querySelectorAll('input[name="shipping_method"]').forEach((input) => {
+        input.addEventListener("change", () => {
+            refreshQuote(state.voucherCodes, true).catch((error) => {
+                showMessage(`Không thể cập nhật phí vận chuyển: ${error.message || "Vui lòng thử lại."}`, "error");
+            });
+        });
+    });
+
+    checkoutButton?.addEventListener("click", submitCheckout);
+}
+
+function renderProduct() {
+    const product = state.product;
+    const imageUrl = product.images?.[0]?.imageUrl
+        || product.imageUrls?.[0]
+        || "https://via.placeholder.com/150";
+    const packageCard = document.querySelector(".package-summary-card");
+
+    if (packageCard) {
+        packageCard.innerHTML = `
+            <div class="card-header-bar">
+                <div class="card-header-title">
+                    <i class="fa-solid fa-boxes-packing"></i>
+                    <h2>Kiện Hàng Thanh Toán</h2>
+                </div>
+                <label class="package-count-tag">
+                    Số lượng:
+                    <input class="checkout-quantity-input" type="number" min="1"
+                        ${Number.isInteger(product.stockQuantity) ? `max="${product.stockQuantity}"` : ""}
+                        value="${state.quantity}" aria-label="Số lượng sản phẩm">
+                </label>
+            </div>
+            <div class="package-group-card">
+                <div class="package-shop-header">
+                    <div class="shop-title-wrap">
+                        <i class="fa-solid fa-store"></i>
+                        <span>Người bán: <strong>${escapeHtml(product.sellerName || "")}</strong></span>
+                    </div>
+                    <span class="trade-type-pill">Mua Ngay</span>
+                </div>
+                <ul class="package-items-list">
+                    <li class="package-item-row">
+                        <div class="package-thumb">
+                            <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(product.title || "Sản phẩm")}">
+                        </div>
+                        <div class="package-item-details">
+                            <h3 class="package-item-name">${escapeHtml(product.title || "Sản phẩm")}</h3>
+                            <p class="package-item-meta">${escapeHtml(product.publisherName || "")}</p>
+                            <div class="package-item-tags">
+                                <span class="tag-qty">SL: ${state.quantity}</span>
+                            </div>
+                        </div>
+                        <div class="package-item-price">
+                            <span class="price-value package-subtotal">Đang tính...</span>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        `;
+
+        packageCard.querySelector(".checkout-quantity-input")?.addEventListener("change", (event) => {
+            const quantity = Number(event.currentTarget.value);
+            if (!Number.isSafeInteger(quantity) || quantity < 1) {
+                event.currentTarget.value = String(state.quantity);
+                return;
+            }
+
+            const previousQuantity = state.quantity;
+            state.quantity = quantity;
+            state.buyNowItem.quantity = quantity;
+            if (!saveBuyNowItem()) {
+                state.quantity = previousQuantity;
+                state.buyNowItem.quantity = state.quantity;
+                event.currentTarget.value = String(state.quantity);
+                showMessage("Không thể lưu thay đổi checkout. Vui lòng kiểm tra bộ nhớ trình duyệt rồi thử lại.", "error");
+                return;
+            }
+            packageCard.querySelector(".tag-qty").textContent = `SL: ${quantity}`;
+            refreshQuote(state.voucherCodes, true).catch((error) => {
+                showMessage(`Không thể cập nhật báo giá: ${error.message || "Vui lòng thử lại."}`, "error");
+            });
         });
     }
+}
 
-    // --------------------------------------------------------------------------
-    // 7. CHAT KIỂM ĐỊNH SÁCH VỚI NGƯỜI BÁN TRƯỚC THANH TOÁN
-    // --------------------------------------------------------------------------
-    const sellerChatCard = document.querySelector('.escrow-contact-card, .seller-chat-trigger');
-    if (sellerChatCard) {
-        sellerChatCard.style.cursor = 'pointer';
-        sellerChatCard.addEventListener('click', () => {
-            showToast('Đang mở kênh chat an toàn với người bán...', 'primary', 'fa-comments');
-        });
+function renderAddress() {
+    const name = document.querySelector(".recipient-name");
+    const phone = document.querySelector(".recipient-phone");
+    const address = document.querySelector(".recipient-address");
+    const defaultBadge = document.querySelector(".badge-address-default");
+
+    if (!isAddressUsable(state.address)) {
+        if (name) name.textContent = "Chưa có địa chỉ nhận hàng";
+        if (phone) phone.textContent = "";
+        if (address) address.textContent = "Vui lòng thêm tên người nhận, số điện thoại và địa chỉ đầy đủ.";
+        if (defaultBadge) defaultBadge.hidden = true;
+        showMessage("Địa chỉ nhận hàng chưa đầy đủ. Hãy cập nhật địa chỉ rồi quay lại thanh toán.", "error");
+        return;
     }
 
-    // --------------------------------------------------------------------------
-    // 8. XÁC NHẬN THANH TOÁN BẢO ĐẢM & HOÀN TẤT ĐƠN HÀNG
-    // --------------------------------------------------------------------------
-    const btnSubmitCheckout = document.querySelector('.btn-submit-checkout, button.btn-confirm-order');
+    if (name) name.textContent = state.address.recipientName || "";
+    if (phone) phone.textContent = state.address.phone || "";
+    if (address) {
+        address.textContent = [
+            state.address.addressDetail,
+            state.address.ward,
+            state.address.district,
+            state.address.province
+        ].filter(Boolean).join(", ");
+    }
+    if (defaultBadge) defaultBadge.hidden = !state.address.isDefault;
+    updateCheckoutButton();
+}
 
-    const showOrderSuccessModal = () => {
-        const successBackdrop = document.createElement('div');
-        successBackdrop.id = 'order-success-modal';
-        successBackdrop.style.cssText = `
-      position: fixed;
-      inset: 0;
-      background: rgba(15, 23, 42, 0.75);
-      backdrop-filter: blur(5px);
-      z-index: 99999;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-    `;
+async function applyVoucher() {
+    const input = document.querySelector("#coupon-code");
+    const typeSelect = document.querySelector("#voucher-type");
+    const applyButton = document.querySelector(".btn-apply-voucher");
+    const code = input?.value.trim();
+    const field = typeSelect?.value;
 
-        successBackdrop.innerHTML = `
-      <div style="
-        background: #ffffff;
-        border-radius: 24px;
-        padding: 36px 32px;
-        max-width: 540px;
-        width: 100%;
-        text-align: center;
-        box-shadow: 0 25px 60px -15px rgba(0,0,0,0.35);
-        transform: scale(0.92);
-        transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        font-family: inherit;
-      ">
-        <div style="width: 76px; height: 76px; border-radius: 50%; background: #dcfce7; color: #16a34a; display: flex; align-items: center; justify-content: center; font-size: 36px; margin: 0 auto 20px;">
-          <i class="fa-solid fa-shield-check"></i>
-        </div>
+    if (!state.product || !state.productId || !state.quantity) {
+        showMessage("Chưa thể kiểm tra voucher vì dữ liệu Buy Now chưa tải xong.", "error");
+        return;
+    }
 
-        <h2 style="font-size: 22px; font-weight: 800; color: #0f172a; margin-bottom: 8px;">
-          Đặt Hàng & Ký Quỹ Thành Công!
-        </h2>
-        <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin-bottom: 20px;">
-          Mã đơn hàng: <strong style="color: #f97316; font-size: 15px;">#${orderState.orderCode}</strong>
-          <br>Tiền thanh toán đã được khoá an toàn tại <strong>ComicHub Escrow Vault</strong>.
-        </p>
+    if (!code) {
+        showMessage("Vui lòng nhập mã voucher.", "error");
+        return;
+    }
+    if (!["platformCode", "sellerCode", "shippingCode"].includes(field)) {
+        showMessage("Vui lòng chọn đúng loại voucher.", "error");
+        return;
+    }
 
-        <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 14px; padding: 16px; text-align: left; font-size: 12px; line-height: 1.6; margin-bottom: 24px;">
-          <div style="display: flex; align-items: center; gap: 8px; color: #16a34a; font-weight: 700; margin-bottom: 6px;">
-            <i class="fa-solid fa-circle-check"></i> Bảo hiểm đồng kiểm 48 giờ kích hoạt
-          </div>
-          <p style="color: #475569; margin: 0;">
-            Khi nhận truyện, bạn có 48 giờ để mở hộp đồng kiểm góc sách, gáy truyện. Nếu không đúng tình trạng đã cam kết, ComicHub sẽ hoàn lại 100% tiền mặt ngay lập tức.
-          </p>
-        </div>
+    const candidateCodes = { ...state.voucherCodes, [field]: code };
+    if (applyButton) {
+        applyButton.disabled = true;
+        applyButton.textContent = "Đang kiểm tra...";
+    }
 
-        <div style="display: flex; gap: 12px; justify-content: center;">
-          <a href="home.html" style="padding: 12px 24px; border-radius: 9999px; border: 1px solid #e2e8f0; background: #ffffff; color: #475569; font-weight: 700; font-size: 13px; text-decoration: none;">
-            Về Trang Chủ
-          </a>
-          <a href="../../thuc/html/page3.html" style="padding: 12px 28px; border-radius: 9999px; border: none; background: #f97316; color: #ffffff; font-weight: 700; font-size: 13px; text-decoration: none; box-shadow: 0 4px 14px rgba(249, 115, 22, 0.35);">
-            Theo Dõi Đơn Hàng
-          </a>
-        </div>
-      </div>
-    `;
+    try {
+        const quoteUpdated = await refreshQuote(candidateCodes, false);
+        if (!quoteUpdated) return;
+        state.voucherCodes = candidateCodes;
+        renderAppliedVouchers();
+        input.value = "";
+        const saved = saveVoucherCodes(candidateCodes);
+        showMessage(
+            saved
+                ? "Voucher đã được Backend xác nhận và áp dụng."
+                : "Voucher đã được Backend xác nhận cho đơn hiện tại, nhưng không thể lưu lựa chọn trong trình duyệt.",
+            saved ? "success" : "error"
+        );
+    } catch (error) {
+        showMessage(error.message || "Backend không chấp nhận voucher này.", "error");
+    } finally {
+        if (applyButton) {
+            applyButton.textContent = "Áp dụng";
+        }
+        updateCheckoutButton();
+    }
+}
 
-        document.body.appendChild(successBackdrop);
+async function refreshQuote(
+    voucherCodes,
+    clearPreviousQuote,
+    shippingMethod = document.querySelector('input[name="shipping_method"]:checked')?.value || "standard",
+    quantity = state.quantity
+) {
+    const requestId = ++state.quoteRequestId;
+    const payload = createQuotePayload(voucherCodes, shippingMethod, quantity);
 
-        requestAnimationFrame(() => {
-            successBackdrop.style.opacity = '1';
-            successBackdrop.firstElementChild.style.transform = 'scale(1)';
+    state.quotePending = true;
+    if (clearPreviousQuote) {
+        state.quote = null;
+        state.quotePayloadFingerprint = null;
+        renderQuote();
+    }
+    updateCheckoutButton();
+
+    try {
+        const response = await apiRequest("/api/vouchers/validate", {
+            method: "POST",
+            body: payload
         });
+        if (requestId !== state.quoteRequestId) return false;
+        if (!isValidQuote(response.data)) {
+            throw new Error("Dữ liệu báo giá từ máy chủ không hợp lệ.");
+        }
+        state.quote = response.data;
+        state.quotePayloadFingerprint = JSON.stringify(payload);
+        renderQuote();
+        return true;
+    } finally {
+        if (requestId === state.quoteRequestId) {
+            state.quotePending = false;
+            updateCheckoutButton();
+        }
+    }
+}
 
-        localStorage.removeItem('comichub_cart');
+function isValidQuote(quote) {
+    return quote && [
+        "subtotalAmount",
+        "shippingFee",
+        "platformDiscount",
+        "sellerDiscount",
+        "shippingDiscount",
+        "totalDiscount",
+        "totalAmount"
+    ].every((key) => quote[key] !== null && quote[key] !== ""
+        && Number.isFinite(Number(quote[key])));
+}
+
+function renderQuote() {
+    const summary = document.querySelector(".summary-breakdown-list");
+    if (!summary) return;
+
+    if (!state.quote) {
+        summary.innerHTML = `<p role="status">Đang chờ báo giá từ máy chủ...</p>`;
+        const subtotal = document.querySelector(".package-subtotal");
+        if (subtotal) subtotal.textContent = "Đang tính...";
+        renderAppliedVouchers();
+        return;
+    }
+
+    const quote = state.quote;
+    const rows = [
+        ["Tạm tính tiền hàng:", quote.subtotalAmount, "subtotal"],
+        ["Phí vận chuyển:", quote.shippingFee, "shipping"],
+        ["Giảm giá từ sàn:", quote.platformDiscount, "platformDiscount"],
+        ["Giảm giá từ người bán:", quote.sellerDiscount, "sellerDiscount"],
+        ["Giảm phí vận chuyển:", quote.shippingDiscount, "shippingDiscount"]
+    ];
+    summary.innerHTML = `
+        ${rows.map(([label, amount, key]) => `
+            <div class="breakdown-item ${String(key).includes("Discount") ? "discount-item" : ""}">
+                <span class="item-label">${label}</span>
+                <span class="item-value ${String(key).includes("Discount") ? "text-discount" : ""}">
+                    ${String(key).includes("Discount") && Number(amount) > 0 ? "-" : ""}${formatVnd(amount)}
+                </span>
+            </div>
+        `).join("")}
+        <div class="breakdown-item discount-item">
+            <span class="item-label">Tổng giảm giá:</span>
+            <span class="item-value text-discount">-${formatVnd(quote.totalDiscount)}</span>
+        </div>
+        <div class="summary-separator-line"></div>
+        <div class="total-payable-row">
+            <div class="total-text-group">
+                <span class="total-title">Tổng thanh toán:</span>
+            </div>
+            <div class="total-price-display">
+                <span class="grand-total-amount">${formatVnd(quote.totalAmount)}</span>
+            </div>
+        </div>
+    `;
+
+    const subtotal = document.querySelector(".package-subtotal");
+    if (subtotal) subtotal.textContent = formatVnd(quote.subtotalAmount);
+    const amount = document.querySelector(".highlight-amount");
+    if (amount) amount.textContent = formatVnd(quote.totalAmount);
+
+    document.querySelectorAll(".shipping-price").forEach((element) => {
+        const method = element.closest(".shipping-option-item")?.querySelector(".shipping-radio")?.value;
+        element.textContent = method === document.querySelector('input[name="shipping_method"]:checked')?.value
+            ? formatVnd(quote.shippingFee)
+            : "Chọn để tính phí";
+    });
+
+    renderAppliedVouchers();
+    updateCheckoutButton();
+}
+
+function renderAppliedVouchers() {
+    const container = document.querySelector(".applied-vouchers-group");
+    if (!container) return;
+    container.replaceChildren();
+
+    const discounts = {
+        platformCode: ["PLATFORM", state.quote?.platformDiscount, "fa-tag"],
+        sellerCode: ["SELLER", state.quote?.sellerDiscount, "fa-store"],
+        shippingCode: ["SHIPPING", state.quote?.shippingDiscount, "fa-truck-fast"]
     };
 
-    if (btnSubmitCheckout) {
-        btnSubmitCheckout.addEventListener('click', (e) => {
-            e.preventDefault();
-            const originalText = btnSubmitCheckout.innerHTML;
+    Object.entries(state.voucherCodes).forEach(([field, code]) => {
+        if (!code || !state.quote) return;
+        const [type, discount, icon] = discounts[field];
+        const pill = document.createElement("div");
+        pill.className = "applied-voucher-pill";
 
-            btnSubmitCheckout.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Đang mã hoá & xác thực ký quỹ...';
-            btnSubmitCheckout.disabled = true;
-            btnSubmitCheckout.style.opacity = '0.8';
+        const iconElement = document.createElement("i");
+        iconElement.className = `fa-solid ${icon}`;
+        const name = document.createElement("span");
+        name.className = "pill-name";
+        name.textContent = `${code} (${type}: -${formatVnd(discount)})`;
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "btn-remove-pill";
+        remove.setAttribute("aria-label", `Gỡ mã ${code}`);
+        remove.textContent = "×";
+        remove.addEventListener("click", () => removeVoucher(field));
 
-            setTimeout(() => {
-                btnSubmitCheckout.innerHTML = originalText;
-                btnSubmitCheckout.disabled = false;
-                btnSubmitCheckout.style.opacity = '1';
+        pill.append(iconElement, name, remove);
+        container.append(pill);
+    });
+}
 
-                showOrderSuccessModal();
-            }, 1200);
+async function removeVoucher(field) {
+    const candidateCodes = { ...state.voucherCodes, [field]: null };
+    try {
+        const quoteUpdated = await refreshQuote(candidateCodes, false);
+        if (!quoteUpdated) return;
+        state.voucherCodes = candidateCodes;
+        renderAppliedVouchers();
+        const saved = saveVoucherCodes(candidateCodes);
+        showMessage(
+            saved
+                ? "Đã gỡ voucher và cập nhật lại báo giá."
+                : "Đã gỡ voucher cho đơn hiện tại, nhưng không thể lưu thay đổi trong trình duyệt.",
+            saved ? "success" : "error"
+        );
+    } catch (error) {
+        showMessage(`Không thể cập nhật báo giá: ${error.message || "Vui lòng thử lại."}`, "error");
+    }
+}
+
+async function submitCheckout(event) {
+    event.preventDefault();
+    if (state.submitting || state.submissionSucceeded || state.quotePending || !state.product
+        || !isAddressUsable(state.address)
+        || (!state.quote && !state.checkoutRequestSnapshot)
+        || (state.submissionFingerprint && !state.checkoutRequestSnapshot)) return;
+
+    const button = document.querySelector(".btn-submit-checkout");
+    const selectedPayment = document.querySelector('input[name="payment_method"]:checked')?.value || "vnpay";
+    const selectedShipping = document.querySelector('input[name="shipping_method"]:checked')?.value || "standard";
+    const shippingAddress = addressText(state.address);
+    const requestFields = {
+        productId: state.productId,
+        quantity: state.quantity,
+        recipientName: state.address.recipientName,
+        recipientPhone: state.address.phone,
+        shippingAddress,
+        shippingMethod: selectedShipping.toUpperCase(),
+        paymentMethod: selectedPayment.toUpperCase(),
+        ...state.voucherCodes
+    };
+    const quotePayload = createQuotePayload(
+        state.voucherCodes,
+        requestFields.shippingMethod,
+        state.quantity
+    );
+
+    state.submitting = true;
+    if (button) {
+        button.disabled = true;
+        const label = button.querySelector("span");
+        if (label) label.textContent = "Đang kiểm tra báo giá...";
+    }
+    updateCheckoutButton();
+
+    try {
+        if (!state.submissionFingerprint
+            && state.quotePayloadFingerprint !== JSON.stringify(quotePayload)) {
+            try {
+                const quoteUpdated = await refreshQuote(
+                    state.voucherCodes,
+                    true,
+                    selectedShipping,
+                    state.quantity
+                );
+                if (!quoteUpdated) return;
+            } catch (error) {
+                showMessage(
+                    `Không thể xác nhận lại báo giá; chưa gửi yêu cầu đặt hàng. ${error.message || "Vui lòng thử lại."}`,
+                    "error"
+                );
+                return;
+            }
+        }
+
+        const requestFingerprint = JSON.stringify(requestFields);
+        if (state.submissionFingerprint && state.submissionFingerprint !== requestFingerprint) {
+            showMessage(
+                "Thông tin checkout đã thay đổi sau lần gửi trước. Để tránh tạo đơn trùng, không thể dùng lại khóa này với nội dung khác. Hãy kiểm tra trạng thái đơn hàng trước khi bắt đầu checkout mới.",
+                "error"
+            );
+            return;
+        }
+        if (!state.submissionFingerprint) {
+            const payload = { ...requestFields, idempotencyKey: state.idempotencyKey };
+            state.buyNowItem.checkoutRequestFingerprint = requestFingerprint;
+            state.buyNowItem.checkoutRequest = payload;
+            state.buyNowItem.checkoutQuote = state.quote;
+            if (!saveBuyNowItem()) {
+                delete state.buyNowItem.checkoutRequestFingerprint;
+                delete state.buyNowItem.checkoutRequest;
+                delete state.buyNowItem.checkoutQuote;
+                showMessage("Không thể lưu trạng thái retry an toàn. Yêu cầu đặt hàng chưa được gửi.", "error");
+                return;
+            }
+            state.submissionFingerprint = requestFingerprint;
+            state.checkoutRequestSnapshot = payload;
+        }
+
+        if (state.submissionFingerprint !== requestFingerprint) {
+            showMessage(
+                "Thông tin checkout đã thay đổi sau lần gửi trước. Để tránh tạo đơn trùng, không thể dùng lại khóa này với nội dung khác. Hãy kiểm tra trạng thái đơn hàng trước khi bắt đầu checkout mới.",
+                "error"
+            );
+            return;
+        }
+
+        const payload = state.checkoutRequestSnapshot;
+        if (button) {
+            const label = button.querySelector("span");
+            if (label) label.textContent = "Đang xử lý...";
+        }
+
+        const response = await apiRequest("/api/orders/buy-now", {
+            method: "POST",
+            body: payload
         });
+        const orderCode = response.data?.orderCode;
+        state.submissionSucceeded = true;
+        showMessage(`Đặt hàng thành công${orderCode ? `! Mã đơn: ${orderCode}` : "."}`, "success");
+        sessionStorage.removeItem("buyNowItem");
+        state.buyNowItem = null;
+        try {
+            sessionStorage.removeItem(VOUCHER_STORAGE_KEY);
+        } catch {
+            showMessage("Đơn đã được tạo thành công. Không thể xóa mã voucher tạm đã lưu trên trình duyệt.", "error");
+        }
+        window.location.href = "../../thuc/html/page3.html";
+    } catch (error) {
+        showMessage(checkoutErrorMessage(error), "error");
+    } finally {
+        state.submitting = false;
+        if (button && !state.submissionSucceeded) {
+            const label = button.querySelector("span");
+            if (label) label.textContent = "Xác Nhận Thanh Toán";
+        }
+        updateCheckoutButton();
+    }
+}
+
+function ensureIdempotencyKey(buyNowItem) {
+    if (typeof buyNowItem.idempotencyKey === "string" && buyNowItem.idempotencyKey.trim()) {
+        return buyNowItem.idempotencyKey;
+    }
+    if (!window.crypto?.getRandomValues) {
+        throw new Error("Trình duyệt không hỗ trợ tạo khóa checkout an toàn.");
     }
 
-    // --------------------------------------------------------------------------
-    // 9. KHỞI ĐỘNG TOÀN BỘ LOGIC CHECKOUT
-    // --------------------------------------------------------------------------
-    recalculateOrder();
-    console.log('ComicHub Checkout script (checkout.js) loaded successfully.');
-});
+    let key;
+    if (window.crypto.randomUUID) {
+        key = window.crypto.randomUUID();
+    } else {
+        const bytes = new Uint8Array(16);
+        window.crypto.getRandomValues(bytes);
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+        key = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    }
+
+    buyNowItem.idempotencyKey = key;
+    if (!saveBuyNowItem()) {
+        delete buyNowItem.idempotencyKey;
+        throw new Error("Không thể lưu khóa checkout. Yêu cầu đặt hàng chưa được gửi.");
+    }
+    return key;
+}
+
+function readCheckoutRequestSnapshot(buyNowItem) {
+    const request = buyNowItem.checkoutRequest;
+    if (!request || typeof request !== "object"
+        || request.productId !== state.productId
+        || request.idempotencyKey !== buyNowItem.idempotencyKey
+        || typeof buyNowItem.checkoutRequestFingerprint !== "string") {
+        return null;
+    }
+
+    const { idempotencyKey, ...requestFields } = request;
+    if (JSON.stringify(requestFields) !== buyNowItem.checkoutRequestFingerprint
+        || !Number.isSafeInteger(request.quantity)
+        || request.quantity < 1
+        || !["STANDARD", "FAST"].includes(request.shippingMethod)
+        || !["VNPAY", "MOMO", "VIETQR", "CREDIT_CARD"].includes(request.paymentMethod)
+        || !["recipientName", "recipientPhone", "shippingAddress"].every(
+            (field) => typeof request[field] === "string" && request[field].trim()
+        )) {
+        return null;
+    }
+
+    return request;
+}
+
+function voucherCodesFromRequest(request) {
+    return {
+        platformCode: request.platformCode || null,
+        sellerCode: request.sellerCode || null,
+        shippingCode: request.shippingCode || null
+    };
+}
+
+function addressFromCheckoutRequest(request) {
+    return {
+        recipientName: request.recipientName,
+        phone: request.recipientPhone,
+        addressDetail: request.shippingAddress,
+        ward: "",
+        district: "",
+        province: "",
+        isDefault: false
+    };
+}
+
+function selectCheckoutOption(name, value) {
+    const option = Array.from(document.querySelectorAll(`input[name="${name}"]`))
+        .find((input) => input.value.toUpperCase() === value);
+    if (option) option.checked = true;
+}
+
+function createQuotePayload(voucherCodes, shippingMethod, quantity) {
+    return {
+        productId: state.productId,
+        quantity,
+        shippingMethod: shippingMethod.toUpperCase(),
+        ...voucherCodes
+    };
+}
+
+function saveBuyNowItem() {
+    try {
+        sessionStorage.setItem("buyNowItem", JSON.stringify(state.buyNowItem));
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function checkoutErrorMessage(error) {
+    if (error.status === 400) {
+        return `Backend từ chối dữ liệu đặt hàng: ${error.message || "Vui lòng kiểm tra thông tin checkout."}`;
+    }
+    if (error.status === 401) {
+        return "Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Đăng nhập lại rồi thử lại cùng checkout này.";
+    }
+    if (error.status === 403) {
+        return `Tài khoản không có quyền đặt đơn này: ${error.message || "Vui lòng liên hệ hỗ trợ."}`;
+    }
+    if (error.status === 409) {
+        return `Backend báo xung đột idempotency: ${error.message || "Khóa này đã gắn với yêu cầu khác."} Không tự tạo khóa mới; hãy kiểm tra đơn hàng trước khi bắt đầu checkout khác.`;
+    }
+    if (!error.status || error.status === 408 || error.status >= 500) {
+        return `Chưa xác định được Backend đã tạo đơn hay chưa do lỗi kết nối. Hãy thử lại với checkout không thay đổi; khóa idempotency được giữ nguyên. ${error.message || ""}`.trim();
+    }
+    return `Đặt hàng thất bại (${error.status}): ${error.message || "Vui lòng thử lại."}`;
+}
+
+function readVoucherCodes() {
+    const codes = emptyVoucherCodes();
+    try {
+        const saved = JSON.parse(sessionStorage.getItem(VOUCHER_STORAGE_KEY) || "null");
+        for (const field of Object.keys(codes)) {
+            if (typeof saved?.[field] === "string" && saved[field].trim()) {
+                codes[field] = saved[field].trim();
+            }
+        }
+    } catch {
+        sessionStorage.removeItem(VOUCHER_STORAGE_KEY);
+    }
+    return codes;
+}
+
+function emptyVoucherCodes() {
+    return { platformCode: null, sellerCode: null, shippingCode: null };
+}
+
+function saveVoucherCodes(codes) {
+    try {
+        sessionStorage.setItem(VOUCHER_STORAGE_KEY, JSON.stringify(codes));
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function updateCheckoutButton() {
+    const button = document.querySelector(".btn-submit-checkout");
+    if (button) {
+        button.disabled = state.submitting || state.submissionSucceeded || state.quotePending
+            || !state.product || !state.idempotencyKey || !isAddressUsable(state.address)
+            || (!state.quote && !state.checkoutRequestSnapshot)
+            || (state.submissionFingerprint && !state.checkoutRequestSnapshot);
+    }
+
+    const applyButton = document.querySelector(".btn-apply-voucher");
+    if (applyButton) {
+        applyButton.disabled = state.submitting || state.submissionSucceeded || Boolean(state.submissionFingerprint)
+            || state.quotePending || !state.product;
+    }
+    const lockCheckoutOptions = state.submitting || state.quotePending
+        || state.submissionSucceeded || Boolean(state.submissionFingerprint);
+    document.querySelectorAll('input[name="shipping_method"], .checkout-quantity-input')
+        .forEach((input) => {
+            input.disabled = lockCheckoutOptions;
+        });
+    document.querySelectorAll('input[name="payment_method"]').forEach((input) => {
+        if (input.dataset.checkoutInitiallyDisabled === undefined) {
+            input.dataset.checkoutInitiallyDisabled = String(input.disabled);
+        }
+        input.disabled = lockCheckoutOptions || input.dataset.checkoutInitiallyDisabled === "true";
+    });
+    document.querySelectorAll(".btn-remove-pill").forEach((button) => {
+        button.disabled = state.submitting || state.submissionSucceeded || Boolean(state.submissionFingerprint);
+    });
+}
+
+function isAddressUsable(address) {
+    return Boolean(
+        address?.recipientName?.trim()
+        && address?.phone?.trim()
+        && addressText(address)
+    );
+}
+
+function addressText(address) {
+    return [
+        address?.addressDetail,
+        address?.ward,
+        address?.district,
+        address?.province
+    ].filter((part) => typeof part === "string" && part.trim()).join(", ");
+}
+
+function showMessage(message, type) {
+    const region = document.querySelector("#checkout-message");
+    if (!region) {
+        if (type === "error") alert(message);
+        return;
+    }
+    region.textContent = message;
+    region.className = `checkout-message ${type}`;
+    region.hidden = false;
+}
+
+function formatVnd(amount) {
+    return new Intl.NumberFormat("vi-VN", {
+        style: "currency",
+        currency: "VND",
+        maximumFractionDigits: 0
+    }).format(Number(amount));
+}
+
+function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+    })[character]);
+}

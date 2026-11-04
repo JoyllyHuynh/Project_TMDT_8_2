@@ -4,6 +4,7 @@ import com.example.demo.dto.ApiResponse;
 import com.example.demo.dto.product.PageResponse;
 import com.example.demo.dto.product.ProductRequest;
 import com.example.demo.dto.product.ProductResponse;
+import com.example.demo.dto.product.ProductVisibilityRequest;
 import com.example.demo.model.enums.ListingType;
 import com.example.demo.service.ProductService;
 import jakarta.validation.Valid;
@@ -13,15 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -30,14 +23,24 @@ import java.util.List;
 @Validated
 @RequiredArgsConstructor
 @RequestMapping("/api/products")
+@CrossOrigin(origins = "*")
 public class ProductController {
 
     private final ProductService productService;
+
+        @GetMapping("/{id}/recommendations")
+    public ResponseEntity<ApiResponse<List<ProductResponse>>> getRecommendations(
+            @PathVariable Long id) {
+        return ResponseEntity.ok(
+                ApiResponse.success(productService.getRecommendations(id)));
+    }
 
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<ProductResponse>>> getProducts(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Integer categoryId,
+            @RequestParam(required = false) Integer publisherId,
+            @RequestParam(required = false) String conditionType,
             @RequestParam(required = false) BigDecimal minPrice,
             @RequestParam(required = false) BigDecimal maxPrice,
             @RequestParam(required = false) @Min(0) @Max(100) Integer minCondition,
@@ -48,11 +51,12 @@ public class ProductController {
             @RequestParam(defaultValue = "12") @Min(1) @Max(100) Integer pageSize,
             @RequestParam(required = false) String sortBy,
             @RequestParam(defaultValue = "newest") String sort,
-            @RequestParam(defaultValue = "desc") String direction
-    ) {
+            @RequestParam(defaultValue = "desc") String direction) {
         return ResponseEntity.ok(ApiResponse.success(productService.getProducts(
                 keyword,
                 categoryId,
+                publisherId,
+                conditionType,
                 minPrice,
                 maxPrice,
                 minCondition,
@@ -62,14 +66,15 @@ public class ProductController {
                 page,
                 pageSize,
                 sortBy != null ? sortBy : sort,
-                direction
-        )));
+                direction)));
     }
 
     @GetMapping("/search")
     public ResponseEntity<ApiResponse<PageResponse<ProductResponse>>> searchProducts(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Integer categoryId,
+            @RequestParam(required = false) Integer publisherId,
+            @RequestParam(required = false) String conditionType,
             @RequestParam(required = false) BigDecimal minPrice,
             @RequestParam(required = false) BigDecimal maxPrice,
             @RequestParam(required = false) @Min(0) @Max(100) Integer minCondition,
@@ -80,18 +85,31 @@ public class ProductController {
             @RequestParam(defaultValue = "12") @Min(1) @Max(100) Integer pageSize,
             @RequestParam(required = false) String sortBy,
             @RequestParam(defaultValue = "newest") String sort,
-            @RequestParam(defaultValue = "desc") String direction
-    ) {
+            @RequestParam(defaultValue = "desc") String direction) {
         return getProducts(
-                keyword, categoryId, minPrice, maxPrice, minCondition, maxCondition, seller,
-                listingType, page, pageSize, sortBy, sort, direction
-        );
+                keyword,
+                categoryId,
+                publisherId,
+                conditionType,
+                minPrice,
+                maxPrice,
+                minCondition,
+                maxCondition,
+                seller,
+                listingType,
+                page,
+                pageSize,
+                sortBy,
+                sort,
+                direction);
     }
 
     @GetMapping("/category/{categoryId}")
     public ResponseEntity<ApiResponse<PageResponse<ProductResponse>>> getProductsByCategory(
             @PathVariable Integer categoryId,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Integer publisherId,
+            @RequestParam(required = false) String conditionType,
             @RequestParam(required = false) BigDecimal minPrice,
             @RequestParam(required = false) BigDecimal maxPrice,
             @RequestParam(required = false) @Min(0) @Max(100) Integer minCondition,
@@ -102,12 +120,11 @@ public class ProductController {
             @RequestParam(defaultValue = "12") @Min(1) @Max(100) Integer pageSize,
             @RequestParam(required = false) String sortBy,
             @RequestParam(defaultValue = "newest") String sort,
-            @RequestParam(defaultValue = "desc") String direction
-    ) {
+            @RequestParam(defaultValue = "desc") String direction) {
         return getProducts(
-                keyword, categoryId, minPrice, maxPrice, minCondition, maxCondition, seller,
-                listingType, page, pageSize, sortBy, sort, direction
-        );
+                keyword, categoryId, publisherId,
+                conditionType, minPrice, maxPrice, minCondition, maxCondition, seller,
+                listingType, page, pageSize, sortBy, sort, direction);
     }
 
     @GetMapping("/{id}")
@@ -120,6 +137,17 @@ public class ProductController {
         return ResponseEntity.ok(ApiResponse.success(productService.getMyProducts()));
     }
 
+    @PatchMapping("/{id}/visibility")
+    public ResponseEntity<ApiResponse<ProductResponse>> updateMyProductVisibility(
+            @PathVariable Long id,
+            @Valid @RequestBody ProductVisibilityRequest request
+    ) {
+        String message = Boolean.TRUE.equals(request.active())
+                ? "Đã hiển thị sản phẩm."
+                : "Đã ẩn sản phẩm.";
+        return ResponseEntity.ok(ApiResponse.success(message, productService.updateVisibility(id, request)));
+    }
+
     @PostMapping
     public ResponseEntity<ApiResponse<ProductResponse>> createProduct(@Valid @RequestBody ProductRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -129,12 +157,10 @@ public class ProductController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<ProductResponse>> updateProduct(
             @PathVariable Long id,
-            @Valid @RequestBody ProductRequest request
-    ) {
+            @Valid @RequestBody ProductRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
                 "Sản phẩm đã được cập nhật và gửi kiểm duyệt.",
-                productService.updateProduct(id, request)
-        ));
+                productService.updateProduct(id, request)));
     }
 
     @DeleteMapping("/{id}")

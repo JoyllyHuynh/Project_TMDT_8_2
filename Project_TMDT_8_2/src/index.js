@@ -244,24 +244,24 @@ async function loadSidebarComponent() {
         </a>
       </nav>
       <div class="sidebar-footer">
-        <div class="store-status-pill">
-          <div class="status-indicator">
-            <span class="pulse-dot"></span>
-            <span>Gian hàng: Đang mở</span>
+            <div class="store-status-pill">
+              <div class="status-indicator">
+                <span class="pulse-dot"></span>
+                <span>Gian hàng: Đang mở</span>
+              </div>
+              <span class="material-symbols-outlined" style="font-size: 16px; color: #94a3b8;">storefront</span>
+            </div>
+            <div class="sidebar-actions">
+              <a href="#" class="sidebar-action-btn" onclick="showToast('Mở cài đặt gian hàng')">
+                <span class="material-symbols-outlined" style="font-size: 18px;">settings</span>
+                <span>Cài đặt</span>
+              </a>
+              <a href="#" class="sidebar-action-btn logout" onclick="(typeof logoutUser === 'function' ? logoutUser('/src/vu/auth/login/login.html') : (showToast('Đã đăng xuất an toàn', 'success'), setTimeout(()=>{window.location.href='/src/vu/auth/login/login.html'},300)))">
+                <span class="material-symbols-outlined" style="font-size: 18px;">logout</span>
+                <span>Đăng xuất</span>
+              </a>
+            </div>
           </div>
-          <span class="material-symbols-outlined" style="font-size: 16px; color: #94a3b8;">storefront</span>
-        </div>
-        <div class="sidebar-actions">
-          <a href="#" class="sidebar-action-btn" onclick="showToast('Mở cài đặt gian hàng')">
-            <span class="material-symbols-outlined" style="font-size: 18px;">settings</span>
-            <span>Cài đặt</span>
-          </a>
-          <a href="#" class="sidebar-action-btn logout" onclick="showToast('Đã đăng xuất an toàn', 'success')">
-            <span class="material-symbols-outlined" style="font-size: 18px;">logout</span>
-            <span>Đăng xuất</span>
-          </a>
-        </div>
-      </div>
     </aside>`;
   }
 

@@ -1,6 +1,7 @@
 package com.example.demo.exception;
 
 import com.example.demo.dto.ApiResponse;
+import com.example.demo.security.GoogleIdentityTokenVerifierUnavailableException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +14,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -31,8 +34,19 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<ApiResponse<Void>> handleUnreadableMessage(HttpMessageNotReadableException ex) {
-        return ResponseEntity.badRequest().body(ApiResponse.fail("Dữ liệu yêu cầu không hợp lệ."));
+    public ResponseEntity<ApiResponse<Void>> handleUnreadableMessage(
+            HttpMessageNotReadableException ex
+    ) {
+        Throwable cause = ex.getMostSpecificCause();
+
+        String message = "Dữ liệu JSON không hợp lệ.";
+
+        if (cause != null && cause.getMessage() != null) {
+            message += " Chi tiết: " + cause.getMessage();
+        }
+
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.fail(message));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
@@ -40,7 +54,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(ApiResponse.fail(ex.getMessage()));
     }
 
-    @ExceptionHandler({BadCredentialsException.class, AuthenticationException.class})
+    @ExceptionHandler({ BadCredentialsException.class, AuthenticationException.class })
     public ResponseEntity<ApiResponse<Void>> handleAuth(Exception ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(ApiResponse.fail("Thông tin đăng nhập chưa chính xác."));
@@ -57,9 +71,21 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.fail("Dữ liệu đã tồn tại hoặc vi phạm ràng buộc."));
     }
 
+    @ExceptionHandler(GoogleIdentityTokenVerifierUnavailableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleGoogleVerificationUnavailable(
+            GoogleIdentityTokenVerifierUnavailableException ex
+    ) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.fail("Không thể xác minh Google lúc này. Vui lòng thử lại."));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleOther(Exception ex) {
+        log.error("Lỗi hệ thống không xác định:", ex);
+
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.fail("Đã xảy ra lỗi hệ thống."));
     }
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 }

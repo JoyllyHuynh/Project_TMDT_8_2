@@ -3,6 +3,7 @@ package com.example.demo.service;
 import com.example.demo.dto.product.PageResponse;
 import com.example.demo.dto.product.ProductRequest;
 import com.example.demo.dto.product.ProductResponse;
+import com.example.demo.dto.product.ProductVisibilityRequest;
 import com.example.demo.exception.ApiException;
 import com.example.demo.model.Product;
 import com.example.demo.model.ProductImage;
@@ -48,6 +49,8 @@ public class ProductService {
     public PageResponse<ProductResponse> getProducts(
             String keyword,
             Integer categoryId,
+            Integer publisherId,
+            String conditionType,
             BigDecimal minPrice,
             BigDecimal maxPrice,
             Integer minCondition,
@@ -57,17 +60,38 @@ public class ProductService {
             int page,
             int pageSize,
             String sort,
-            String direction
-    ) {
+            String direction) {
         validateFilters(minPrice, maxPrice, minCondition, maxCondition);
         if (categoryId != null && !categoryRepository.existsById(categoryId)) {
             throw ApiException.notFound("Không tìm thấy thể loại.");
+        }
+        if (publisherId != null && !publisherRepository.existsById(publisherId)) {
+            throw ApiException.notFound("Không tìm thấy nhà xuất bản.");
+        }
+
+        if (conditionType != null && !conditionType.isBlank()) {
+            switch (conditionType.toUpperCase(Locale.ROOT)) {
+                case "NEW" -> {
+                    minCondition = 100;
+                    maxCondition = 100;
+                }
+                case "LIKE_NEW" -> {
+                    minCondition = 95;
+                    maxCondition = 99;
+                }
+                case "YELLOWED" -> {
+                    minCondition = 0;
+                    maxCondition = 94;
+                }
+                default -> throw ApiException.badRequest("Loại tình trạng sách không hợp lệ.");
+            }
         }
 
         Pageable pageable = PageRequest.of(page, pageSize, resolveSort(sort, direction));
         Page<Product> products = productRepository.search(
                 normalizeKeyword(keyword),
                 categoryId,
+                publisherId,
                 listingType,
                 minPrice,
                 maxPrice,
@@ -76,8 +100,7 @@ public class ProductService {
                 normalizeKeyword(sellerName),
                 true,
                 ModerationStatus.APPROVED,
-                pageable
-        );
+                pageable);
         return PageResponse.from(products, this::toResponse);
     }
 
@@ -88,6 +111,30 @@ public class ProductService {
                         && item.getModerationStatus() == ModerationStatus.APPROVED)
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy sản phẩm."));
         return toResponse(product);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProductResponse> getRecommendations(Long productId) {
+
+        // 1. Kiểm tra sản phẩm đang được xem có tồn tại và được phép hiển thị
+        Product currentProduct = productRepository.findByIdAndDeletedAtIsNull(productId)
+                .filter(item -> Boolean.TRUE.equals(item.getActive())
+                        && item.getModerationStatus() == ModerationStatus.APPROVED)
+                .orElseThrow(() -> ApiException.notFound("Không tìm thấy sản phẩm."));
+
+        // 2. Lấy tối đa 8 sản phẩm gợi ý
+        Pageable pageable = PageRequest.of(0, 8);
+
+        Page<Product> recommendations = productRepository.findRecommendations(
+                currentProduct.getId(),
+                ModerationStatus.APPROVED,
+                pageable);
+
+        // 3. Chuyển danh sách Product thành ProductResponse
+        return recommendations.getContent()
+                .stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -144,15 +191,34 @@ public class ProductService {
         product.setDeletedAt(LocalDateTime.now());
     }
 
+    @Transactional
+    public ProductResponse updateVisibility(Long id, ProductVisibilityRequest request) {
+        if (request == null || request.active() == null) {
+            throw ApiException.badRequest("Trạng thái hiển thị không hợp lệ.");
+        }
+        Product product = productRepository.findByIdAndDeletedAtIsNull(id)
+                .orElseThrow(() -> ApiException.notFound("Không tìm thấy sản phẩm."));
+        verifyOwnerOrAdmin(product);
+        if (Boolean.TRUE.equals(request.active()) && product.getModerationStatus() != ModerationStatus.APPROVED) {
+            throw ApiException.badRequest("Chỉ có thể hiển thị sản phẩm đã được duyệt.");
+        }
+
+        product.setActive(request.active());
+        productRepository.save(product);
+        return toResponse(product);
+    }
+
     private void applyRequest(Product product, ProductRequest request) {
         product.setTitle(request.getTitle().trim());
         product.setDescription(request.getDescription().trim());
         product.setCategory(categoryRepository.findById(request.getCategoryId())
                 .orElseThrow(() -> ApiException.notFound("Không tìm thấy thể loại.")));
-        product.setAuthor(request.getAuthorId() == null ? null : authorRepository.findById(request.getAuthorId())
-                .orElseThrow(() -> ApiException.notFound("Không tìm thấy tác giả.")));
-        product.setPublisher(request.getPublisherId() == null ? null : publisherRepository.findById(request.getPublisherId())
-                .orElseThrow(() -> ApiException.notFound("Không tìm thấy nhà xuất bản.")));
+        product.setAuthor(request.getAuthorId() == null ? null
+                : authorRepository.findById(request.getAuthorId())
+                        .orElseThrow(() -> ApiException.notFound("Không tìm thấy tác giả.")));
+        product.setPublisher(request.getPublisherId() == null ? null
+                : publisherRepository.findById(request.getPublisherId())
+                        .orElseThrow(() -> ApiException.notFound("Không tìm thấy nhà xuất bản.")));
         product.setVolumeNumbers(request.getVolumeNumbers());
         product.setEditionType(request.getEditionType());
         product.setPublicationYear(request.getPublicationYear());
@@ -165,7 +231,8 @@ public class ProductService {
 
     private void saveImages(Product product, ProductRequest request) {
         productImageRepository.deleteByProduct(product);
-        if (request.getImageUrls() == null) return;
+        if (request.getImageUrls() == null)
+            return;
 
         for (int order = 0; order < request.getImageUrls().size(); order++) {
             ProductImage image = new ProductImage();
@@ -179,8 +246,7 @@ public class ProductService {
     private ProductResponse toResponse(Product product) {
         return ProductResponse.from(
                 product,
-                productImageRepository.findByProductOrderByDisplayOrderAsc(product)
-        );
+                productImageRepository.findByProductOrderByDisplayOrderAsc(product));
     }
 
     private void verifyOwnerOrAdmin(Product product) {
@@ -209,8 +275,7 @@ public class ProductService {
             BigDecimal minPrice,
             BigDecimal maxPrice,
             Integer minCondition,
-            Integer maxCondition
-    ) {
+            Integer maxCondition) {
         if (minPrice != null && minPrice.signum() < 0
                 || maxPrice != null && maxPrice.signum() < 0
                 || minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
@@ -235,7 +300,8 @@ public class ProductService {
                 .replaceAll("(^-|-$)", "");
         String suffix = UUID.randomUUID().toString().substring(0, 8);
         String base = normalized.isBlank() ? "product" : normalized;
-        if (base.length() > 245) base = base.substring(0, 245).replaceAll("-$", "");
+        if (base.length() > 245)
+            base = base.substring(0, 245).replaceAll("-$", "");
         return base + "-" + suffix;
     }
 }

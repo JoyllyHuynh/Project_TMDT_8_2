@@ -154,8 +154,8 @@
             </nav>
             <div class="cart-context-badge">
                 <i class="fa-solid fa-cart-shopping"></i>
-                <span>Đơn đang thanh toán: <strong>5.050.000₫</strong> (4 truyện)</span>
-                <span class="tag-auto-applied">TỰ ĐỘNG TỐI ƯU 2 MÃ (-85K)</span>
+                <span>Voucher chỉ được xác nhận trong trang thanh toán.</span>
+                <span class="tag-auto-applied">CHƯA XÁC THỰC MÃ</span>
             </div>
         </div>
 
@@ -165,7 +165,7 @@
                 <div class="voucher-search-area">
                     <div class="hero-tag-row">
                         <span class="badge-tag-orange">KHO VOUCHER COMICHUB</span>
-                        <span class="refresh-time-text">Cập nhật mỗi ngày lúc 0H - 12H - 21H</span>
+                        <span class="refresh-time-text">Nhập mã để Backend kiểm tra tại trang thanh toán</span>
                     </div>
                     <h1 class="hero-voucher-title">Săn Mã Giảm Giá &amp; Ưu Đãi Độc Quyền Sưu Tầm</h1>
 
@@ -173,20 +173,18 @@
                     <form class="voucher-code-input-form" action="#" method="POST">
                         <div class="voucher-input-wrapper">
                             <i class="fa-solid fa-ticket input-leading-icon"></i>
-                            <input type="text" class="voucher-text-input" placeholder="Nhập mã ưu đãi (VD: OTAKU50K, FREESHIP35K...)" aria-label="Nhập mã ưu đãi">
-                            <button type="submit" class="btn-save-voucher">LƯU MÃ</button>
+                            <input type="text" class="voucher-text-input" placeholder="Nhập mã voucher bạn có" aria-label="Nhập mã ưu đãi">
+                            <button type="submit" class="btn-save-voucher">CHỌN CHO THANH TOÁN</button>
                         </div>
+                        <label class="voucher-type-label" for="vault-voucher-type">Loại voucher:</label>
+                        <select id="vault-voucher-type" class="voucher-type-select" aria-label="Loại voucher">
+                            <option value="platformCode">PLATFORM</option>
+                            <option value="sellerCode">SELLER</option>
+                            <option value="shippingCode">SHIPPING</option>
+                        </select>
                     </form>
 
-                    <!-- Gợi ý mã hot & liên kết nhanh -->
                     <div class="voucher-quick-links">
-                        <div class="hot-suggestions">
-                            <span class="suggest-label">Gợi ý:</span>
-                            <button type="button" class="btn-suggest-code">OTAKU50K</button>
-                            <button type="button" class="btn-suggest-code">COMICFREE</button>
-                            <button type="button" class="btn-suggest-code">MANGA100K</button>
-                            <button type="button" class="btn-suggest-code">BARTERSAFE</button>
-                        </div>
                         <div class="auxiliary-links">
                             <a href="#rules" class="text-link"><i class="fa-regular fa-circle-question"></i> Quy chế &amp; Thể lệ</a>
                             <a href="#history" class="text-link"><i class="fa-solid fa-clock-rotate-left"></i> Lịch sử voucher</a>
@@ -205,18 +203,18 @@
                     </div>
                     <div class="wallet-stats-grid">
                         <div class="stat-cell available">
-                            <span class="stat-number">18</span>
-                            <span class="stat-desc">Voucher có sẵn</span>
+                            <span class="stat-number">—</span>
+                            <span class="stat-desc">Không có API danh sách</span>
                         </div>
                         <div class="stat-cell expiring">
-                            <span class="stat-number">3</span>
-                            <span class="stat-desc">Sắp hết hạn trong 24h</span>
+                            <span class="stat-number">—</span>
+                            <span class="stat-desc">Hạn dùng do Backend kiểm tra</span>
                         </div>
                     </div>
                     <div class="wallet-coins-footer">
                         <div class="coins-amount">
                             <i class="fa-solid fa-coins icon-coin"></i>
-                            <span>Otaku Coins: <strong>1.250 xu</strong></span>
+                            <span>Trạng thái voucher do Backend xác nhận tại checkout.</span>
                         </div>
                         <button type="button" class="btn-exchange-coin">Đổi xu lấy mã</button>
                     </div>
@@ -227,12 +225,7 @@
         <!-- THANH DANH MỤC TABS (SHOPEE-STYLE TABS) -->
         <nav class="voucher-tabs-bar" aria-label="Phân loại voucher">
             <div class="tabs-scroll-wrapper">
-                <button type="button" class="voucher-tab-item active">Tất Cả <span class="count-pill">18</span></button>
-                <button type="button" class="voucher-tab-item"><i class="fa-solid fa-truck-fast"></i> Miễn Phí Vận Chuyển (SafeShip) <span class="count-pill">4</span></button>
-                <button type="button" class="voucher-tab-item"><i class="fa-solid fa-book"></i> Voucher ComicHub Toàn Sàn <span class="count-pill">6</span></button>
-                <button type="button" class="voucher-tab-item"><i class="fa-solid fa-coins"></i> Hoàn Xu Otaku Xtra <span class="count-pill">3</span></button>
-                <button type="button" class="voucher-tab-item"><i class="fa-solid fa-store"></i> Voucher Shop Uy Tín <span class="count-pill">3</span></button>
-                <button type="button" class="voucher-tab-item"><i class="fa-solid fa-arrows-rotate"></i> Barter &amp; Escrow <span class="count-pill">2</span></button>
+                <span>Danh sách voucher chưa được Backend cung cấp.</span>
             </div>
             <div class="sort-dropdown-wrap">
                 <span class="sort-label">Sắp xếp:</span>
@@ -250,14 +243,18 @@
                 <i class="fa-solid fa-layer-group"></i>
             </div>
             <div class="rule-content-text">
-                <strong>Cơ chế áp dụng cùng lúc tối đa 3 loại mã cho mỗi đơn hàng ComicHub:</strong>
-                <span>1 Mã Giảm Giá Sách + 1 Mã Miễn Phí Vận Chuyển SafeShip + 1 Mã Trợ Giá Trao Đổi Barter Ký Quỹ hoặc Hoàn Xu.</span>
+                <strong>Hỗ trợ nhập mã PLATFORM, SELLER và SHIPPING:</strong>
+                <span>Backend sẽ kiểm tra điều kiện, mức giảm và tổng thanh toán khi áp dụng mã tại trang checkout.</span>
             </div>
             <div class="rule-auto-applied-tag">
                 <i class="fa-solid fa-wand-magic-sparkles"></i>
-                <span>Tự động chọn voucher tốt nhất khi thanh toán</span>
+                <span>Không tự động chọn hoặc tính giảm giá trên giao diện</span>
             </div>
         </div>
+
+        <section class="voucher-catalog-notice" role="status">
+            Backend hiện chưa có API liệt kê kho voucher. Các mã chỉ được xác nhận sau khi nhập tại checkout và gọi API kiểm tra voucher.
+        </section>
 
         <!-- ================= DANH SÁCH CÁC PHÂN KHU VOUCHER ================= -->
         <!-- 1. VOUCHER MIỄN PHÍ VẬN CHUYỂN SAFESHIP -->
@@ -759,13 +756,10 @@
                     </div>
                     <div class="floating-text-group">
                         <div class="floating-title-row">
-                            <strong>Đã áp dụng 2 voucher vào giỏ:</strong>
-                            <span class="tag-code-active">OTAKU50K</span>
-                            <span class="tag-code-active">COMICFREE</span>
+                            <strong>Chưa chọn mã ưu đãi nào</strong>
                         </div>
                         <div class="floating-saving-calc">
-                            <span>Tổng số tiền khấu trừ: <strong class="highlight-saving">-85.000₫</strong></span>
-                            <span class="saving-detail">(Giảm tiền sách: 50.000₫ • Giảm phí vận chuyển: 35.000₫)</span>
+                            Số tiền giảm sẽ được tính sau khi Backend xác thực mã tại trang thanh toán.
                         </div>
                     </div>
                 </div>
@@ -868,5 +862,6 @@
     </div>
 </footer>
 <script src="../js/voucher.js"></script>
+<script type="module" src="../../shared/chatbot/chatbot.js"></script>
 </body>
 </html>

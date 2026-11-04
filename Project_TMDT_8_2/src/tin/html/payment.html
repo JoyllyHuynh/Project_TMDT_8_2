@@ -207,21 +207,21 @@
                             <i class="fa-solid fa-location-dot"></i>
                             <h2>Địa Chỉ Nhận Hàng Sưu Tầm</h2>
                         </div>
-                        <button type="button" class="btn-text-action">Thay đổi địa chỉ</button>
+                        <a href="../../vu/manage_address/manage_address.html" class="btn-text-action">Thay đổi địa chỉ</a>
                     </div>
                     <div class="address-details">
                         <div class="recipient-row">
-                            <strong class="recipient-name">Nguyễn An Vinh</strong>
+                            <strong class="recipient-name">Đang tải địa chỉ...</strong>
                             <span class="recipient-divider">•</span>
-                            <span class="recipient-phone">0988.123.456</span>
-                            <span class="badge-address-default">Mặc định</span>
+                            <span class="recipient-phone"></span>
+                            <span class="badge-address-default" hidden>Mặc định</span>
                         </div>
                         <p class="recipient-address">
-                            124 Hoàng Hoa Thám, Phường Liễu Giai, Quận Ba Đình, Hà Nội
+                            Đang tải địa chỉ nhận hàng...
                         </p>
                         <div class="collector-delivery-note">
                             <i class="fa-solid fa-triangle-exclamation"></i>
-                            <span><strong>Ghi chú lưu kho:</strong> "Hàng truyện tranh sưu tầm dễ móp gáy, vui lòng nhẹ tay. Giao ngoài giờ hành chính nếu sau 18h."</span>
+                            <span>Vui lòng kiểm tra chính xác thông tin người nhận trước khi đặt hàng.</span>
                         </div>
                     </div>
                 </section>
@@ -240,11 +240,11 @@
                     <div class="shipping-options-grid">
                         <!-- Hỏa Tốc SafeShip -->
                         <label class="shipping-option-item">
-                            <input type="radio" name="shipping_method" value="express" class="shipping-radio">
+                            <input type="radio" name="shipping_method" value="fast" class="shipping-radio">
                             <div class="shipping-content">
                                 <div class="shipping-main-info">
                                     <span class="shipping-name">Hỏa Tốc ComicHub SafeShip</span>
-                                    <span class="shipping-price">45.000₫</span>
+                                    <span class="shipping-price">—</span>
                                 </div>
                                 <p class="shipping-desc">Xe chuyên dụng chở sách, giao trong 2h tại Hà Nội &amp; TP.HCM</p>
                                 <span class="shipping-perk"><i class="fa-solid fa-box"></i> Thùng carton 3 lớp chèn túi khí bóng</span>
@@ -261,12 +261,11 @@
                                         <span class="badge-chosen">ĐÃ CHỌN</span>
                                     </div>
                                     <div class="shipping-pricing-discount">
-                                        <span class="shipping-price-old">35.000₫</span>
-                                        <span class="shipping-price-free">0₫</span>
+                                        <span class="shipping-price">—</span>
                                     </div>
                                 </div>
                                 <p class="shipping-desc">Nhận hàng sau 1–2 ngày (Hà Nội – TP.HCM)</p>
-                                <span class="shipping-perk perk-applied"><i class="fa-solid fa-tag"></i> Đã áp dụng mã freeship COMICFREE</span>
+                                <span class="shipping-perk perk-applied"></span>
                             </div>
                         </label>
                     </div>
@@ -295,16 +294,15 @@
             </span>
             <span class="badge-recommend">Khuyên dùng</span>
                  </div>
-                                <span class="payment-subtitle">Quét mã QR bằng ứng dụng VNPAY để thanh toán nhanh chóng và an toàn</span>
+                                <span class="payment-subtitle">Đơn hàng được tạo qua Backend. API hiện chưa cung cấp mã QR hoặc thông tin giao dịch VNPAY.</span>
                             </label>
                             <!-- Box hiển thị thông tin VNPAY-QR -->
                             <div class="qr-payment-details-box">
                                 <div class="qr-code-wrapper">
-                                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=VNPAY-COMICHUB-CHUB99882-5050000" alt="Mã QR thanh toán VNPAY" class="qr-code-img">
                                     <span class="qr-scan-instruction">
-                <i class="fa-solid fa-qrcode"></i>
-                Mở VNPAY và quét mã QR
-            </span>
+                                        <i class="fa-solid fa-circle-info"></i>
+                                        Hướng dẫn thanh toán sẽ hiển thị khi Backend có API giao dịch.
+                                    </span>
                                 </div>
                                 <div class="bank-transfer-info-table">
 
@@ -334,37 +332,13 @@
                 </span>
 
                                         <strong class="info-value highlight-amount">
-                                            5.050.000₫
+                                            —
                                         </strong>
-                                    </div>
-
-                                    <div class="info-row">
-                <span class="info-label">
-                    Mã đơn hàng:
-                </span>
-
-                                        <div class="copyable-value">
-
-                                            <strong class="transfer-code">
-                                                CHUB 99882
-                                            </strong>
-
-                                            <button
-                                                    type="button"
-                                                    class="btn-copy"
-                                                    aria-label="Sao chép mã đơn hàng"
-                                            >
-                                                <i class="fa-regular fa-copy"></i>
-                                            </button>
-
-                                        </div>
                                     </div>
 
                                     <p class="qr-security-note">
                                         <i class="fa-solid fa-shield-halved"></i>
-
-                                        Mở ứng dụng VNPAY và quét mã QR để thanh toán.
-                                        Sau khi thanh toán thành công, hệ thống sẽ xác nhận đơn hàng.
+                                        Việc tạo đơn hàng chưa đồng nghĩa với việc thanh toán đã hoàn tất.
                                     </p>
 
                                 </div>
@@ -376,11 +350,11 @@
                         <!-- Lựa chọn 2: COD Đồng kiểm -->
                         <div class="payment-method-item">
                             <label class="payment-label">
-                                <input type="radio" name="payment_method" value="cod" class="payment-radio">
+                                <input type="radio" name="payment_method" value="momo" class="payment-radio" disabled>
                                 <div class="payment-header-row">
-                                    <span class="payment-title">Thanh Toán Khi Nhận Hàng (COD Có Đồng Kiểm)</span>
+                                    <span class="payment-title">Thanh Toán MoMo (Chưa khả dụng)</span>
                                 </div>
-                                <span class="payment-subtitle">Được mở kiện bọc màng kiếng kiểm tra tình trạng bìa gáy đúng như mô tả trước khi trả tiền</span>
+                                <span class="payment-subtitle">Phương thức này chưa được bật trong cấu hình thanh toán hiện tại.</span>
                             </label>
                         </div>
                     </div>
@@ -519,75 +493,32 @@
                     <div class="voucher-input-section">
                         <div class="voucher-section-top">
                             <label for="coupon-code" class="voucher-label">Mã giảm giá / Voucher:</label>
-                            <a href="#voucher-modal" class="voucher-explore-link">Xem kho voucher (5)</a>
+                            <a href="voucher.html" class="voucher-explore-link">Xem kho voucher</a>
                         </div>
                         <div class="voucher-input-bar">
                             <i class="fa-solid fa-ticket voucher-input-icon"></i>
                             <input type="text" id="coupon-code" name="voucher_code" class="voucher-field" placeholder="Nhập mã voucher...">
-                            <button type="button" class="btn-apply-voucher">Áp dụng</button>
+                            <button type="button" class="btn-apply-voucher" disabled>Áp dụng</button>
                         </div>
+                        <label class="voucher-type-label" for="voucher-type">Loại voucher:</label>
+                        <select id="voucher-type" class="voucher-type-select">
+                            <option value="platformCode">PLATFORM</option>
+                            <option value="sellerCode">SELLER</option>
+                            <option value="shippingCode">SHIPPING</option>
+                        </select>
+                        <p id="checkout-message" class="checkout-message" role="status" hidden></p>
 
-                        <!-- Danh sách mã đã áp dụng thành công -->
-                        <div class="applied-vouchers-group">
-                            <div class="applied-voucher-pill">
-                                <i class="fa-solid fa-tag"></i>
-                                <span class="pill-name">OTAKU50K (-50k)</span>
-                                <button type="button" class="btn-remove-pill" aria-label="Gỡ mã OTAKU50K">×</button>
-                            </div>
-                            <div class="applied-voucher-pill">
-                                <i class="fa-solid fa-truck-fast"></i>
-                                <span class="pill-name">COMICFREE (-35k)</span>
-                                <button type="button" class="btn-remove-pill" aria-label="Gỡ mã COMICFREE">×</button>
-                            </div>
-                        </div>
+                        <div class="applied-vouchers-group" aria-live="polite"></div>
                     </div>
 
                     <!-- BẢNG TÍNH TOÁN CHI PHÍ -->
                     <div class="summary-breakdown-list">
-                        <div class="breakdown-item">
-                            <span class="item-label">Tạm tính tiền sách (4 món):</span>
-                            <span class="item-value">4.950.000₫</span>
-                        </div>
-                        <div class="breakdown-item">
-                  <span class="item-label">
-                    Tiền bù trao đổi 1–1:
-                    <i class="fa-regular fa-circle-question" title="Tiền thỏa thuận bù thêm cho Collector bên kia"></i>
-                  </span>
-                            <span class="item-value">150.000₫</span>
-                        </div>
-                        <div class="breakdown-item">
-                            <span class="item-label">Đóng gói chống sốc 3 lớp:</span>
-                            <span class="item-value text-free">Miễn phí</span>
-                        </div>
-                        <div class="breakdown-item">
-                            <span class="item-label">Phí vận chuyển tiêu chuẩn:</span>
-                            <span class="item-value">35.000₫</span>
-                        </div>
-                        <div class="breakdown-item discount-item">
-                            <span class="item-label">Voucher giảm giá sách:</span>
-                            <span class="item-value text-discount">-50.000₫</span>
-                        </div>
-                        <div class="breakdown-item discount-item">
-                            <span class="item-label">Ưu đãi miễn phí vận chuyển:</span>
-                            <span class="item-value text-discount">-35.000₫</span>
-                        </div>
-                        <div class="summary-separator-line"></div>
-
-                        <!-- TỔNG THANH TOÁN -->
-                        <div class="total-payable-row">
-                            <div class="total-text-group">
-                                <span class="total-title">Tổng Thanh Toán:</span>
-                                <span class="total-note">Đã bao gồm VAT &amp; Phí bảo hiểm truyện hiếm 100%</span>
-                            </div>
-                            <div class="total-price-display">
-                                <span class="grand-total-amount">5.050.000₫</span>
-                            </div>
-                        </div>
+                        <p role="status">Đang chờ báo giá từ máy chủ...</p>
                     </div>
 
                     <!-- NÚT XÁC NHẬN THANH TOÁN BẢO ĐẢM -->
                     <div class="checkout-submit-group">
-                        <button type="button" class="btn-submit-checkout" onclick="alert('Đặt hàng & Thanh toán thành công! Đang chuyển tới trang theo dõi đơn hàng GHN...'); window.location.href='../../thuc/html/page3.html';">
+                        <button type="button" class="btn-submit-checkout">
                             <i class="fa-solid fa-lock"></i>
                             <span>Xác Nhận Thanh Toán</span>
                         </button>
@@ -715,6 +646,6 @@
         </div>
     </div>
 </footer>
-<script src="../js/payment.js"></script>
+<script type="module" src="../js/payment.js"></script>
 </body>
 </html>

@@ -13,6 +13,7 @@ import java.util.List;
 public interface OrderItemRepository extends JpaRepository<OrderItem, Long> {
 
     List<OrderItem> findByOrder(Order order);
+    List<OrderItem> findTop5ByOrderOrderByIdAsc(Order order);
 
     @Query("""
             select item from OrderItem item

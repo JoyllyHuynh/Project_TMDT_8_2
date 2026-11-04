@@ -1,6 +1,6 @@
 import { apiRequest } from "../../../shared/api-client.js";
 
-function saveSession(auth) {
+export function saveSession(auth) {
     const session = JSON.stringify({ token: auth.token, user: auth.user });
     const storage = auth.remember ? localStorage : sessionStorage;
     const otherStorage = auth.remember ? sessionStorage : localStorage;
@@ -37,6 +37,20 @@ export async function loginUser(email, password, remember) {
     return result;
 }
 
+export async function loginWithGoogle(idToken, remember) {
+    const result = await apiRequest("/api/auth/google", {
+        method: "POST",
+        body: { idToken, remember }
+    });
+
+    if (!result.data?.token || !result.data.user) {
+        throw new Error("Phản hồi đăng nhập Google thiếu token hoặc thông tin người dùng.");
+    }
+
+    saveSession({ ...result.data, remember });
+    return result;
+}
+
 export function requestPasswordReset(email) {
     return apiRequest("/api/auth/forgot-password", {
         method: "POST",
@@ -54,6 +68,11 @@ export function resetPassword(token, password) {
         method: "POST",
         body: { token, password }
     });
+}
+export function validateResetToken(token) {
+    return apiRequest(
+        `/api/auth/validate-reset-token?token=${encodeURIComponent(token)}`
+    );
 }
 
 export async function getCurrentUser() {

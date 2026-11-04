@@ -336,30 +336,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // --------------------------------------------------------------------------
     // 5. NÚT "MUA NGAY (BẢO CHỨNG PAY)"
     // --------------------------------------------------------------------------
-    const btnBuyNow = document.querySelector('.btn-buy-now, button.bg-\\[\\#F97316\\].shadow-lg');
-
-    if (btnBuyNow) {
-        btnBuyNow.addEventListener('click', (e) => {
-            e.preventDefault();
-            const priceText = document.querySelector('.current-price, .text-3xl.text-\\[\\#F97316\\]')?.textContent.trim() || '1.850.000₫';
-
-            let cartItems = JSON.parse(localStorage.getItem('comichub_cart') || '[]');
-            cartItems.push({
-                title: bookTitle,
-                price: priceText,
-                condition: 'Near Mint 9.8',
-                seller: 'AnVinh Collector',
-                time: Date.now()
-            });
-            localStorage.setItem('comichub_cart', JSON.stringify(cartItems));
-
-            showToast(`Đang chuyển đến trang Thanh Toán Bảo Chứng cho "${bookTitle}"...`, 'primary', 'fa-spinner fa-spin');
-
-            setTimeout(() => {
-                window.location.href = 'payment.html';
-            }, 700);
-        });
-    }
+    // Nút "Mua Ngay" được xử lý trong catalog-detail.js (lưu buyNowItem rồi chuyển sang payment.html).
+    // Không gắn thêm handler ở đây để tránh tự chuyển sang payment.html khi chưa lưu dữ liệu.
 
     // --------------------------------------------------------------------------
     // 6. KHỚP KÈO NHANH (KÈO TRAO ĐỔI 01 & 02 CÓ SẴN)

@@ -4,6 +4,7 @@ import com.example.demo.dto.ApiResponse;
 import com.example.demo.dto.auth.AuthResponse;
 import com.example.demo.dto.auth.ForgotPasswordRequest;
 import com.example.demo.dto.auth.LoginRequest;
+import com.example.demo.dto.auth.GoogleLoginRequest;
 import com.example.demo.dto.auth.RegisterRequest;
 import com.example.demo.dto.auth.ResetPasswordRequest;
 import com.example.demo.dto.auth.UpdateProfileRequest;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -38,13 +40,32 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success("Đăng nhập thành công", authService.login(request)));
     }
 
+    @PostMapping("/google")
+    public ResponseEntity<ApiResponse<AuthResponse>> googleLogin(
+            @Valid @RequestBody GoogleLoginRequest request
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Đăng nhập bằng Google thành công.",
+                authService.loginWithGoogle(request.getIdToken(), request.isRemember())
+        ));
+    }
+
     @PostMapping("/forgot-password")
     public ResponseEntity<ApiResponse<Void>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         authService.requestPasswordReset(request);
         return ResponseEntity.ok(ApiResponse.success(
                 "Nếu email được đăng ký, yêu cầu đặt lại mật khẩu đã được tiếp nhận.",
-                null
-        ));
+                null));
+    }
+
+    @GetMapping("/validate-reset-token")
+    public ResponseEntity<ApiResponse<Void>> validateResetToken(
+            @RequestParam String token) {
+
+        authService.validateResetToken(token);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Liên kết hợp lệ.", null));
     }
 
     @PostMapping("/reset-password")
@@ -53,20 +74,25 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success("Mật khẩu đã được cập nhật.", null));
     }
 
+    @PostMapping("/me/seller-request")
+    public ResponseEntity<ApiResponse<UserResponse>> requestSellerRole() {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Đã gửi yêu cầu trở thành người bán, chờ admin xét duyệt.",
+                UserResponse.from(authService.requestSellerRole(SecurityUtils.currentUserId()))
+        ));
+    }
+
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<UserResponse>> currentUser() {
         return ResponseEntity.ok(ApiResponse.success(
-                UserResponse.from(authService.getCurrentUser(SecurityUtils.currentUserId()))
-        ));
+                UserResponse.from(authService.getCurrentUser(SecurityUtils.currentUserId()))));
     }
 
     @PutMapping("/me")
     public ResponseEntity<ApiResponse<UserResponse>> updateCurrentUser(
-            @Valid @RequestBody UpdateProfileRequest request
-    ) {
+            @Valid @RequestBody UpdateProfileRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
                 "Cập nhật hồ sơ thành công.",
-                UserResponse.from(authService.updateCurrentUser(SecurityUtils.currentUserId(), request))
-        ));
+                UserResponse.from(authService.updateCurrentUser(SecurityUtils.currentUserId(), request))));
     }
 }

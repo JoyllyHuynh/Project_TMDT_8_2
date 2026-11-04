@@ -6,6 +6,59 @@ import {
     friendlyApiError
 } from "./catalog-ui.js";
 
+// Trang đăng nhập: src/vu/auth/login/login.html (tính từ src/tin/html/)
+const LOGIN_URL = "../../vu/auth/login/login.html";
+
+// api-client.js lưu token trong object "bookmooch_session" (localStorage hoặc sessionStorage)
+function hasLoginSession() {
+    for (const storage of [localStorage, sessionStorage]) {
+        try {
+            const session = JSON.parse(storage.getItem("bookmooch_session") || "null");
+            if (typeof session?.token === "string") return true;
+        } catch {
+            // bỏ qua dữ liệu session bị hỏng
+        }
+    }
+    return false;
+}
+
+function handleBuyNow(productId) {
+    if (!hasLoginSession()) {
+        alert("Bạn cần đăng nhập để thực hiện mua ngay!");
+        window.location.href = LOGIN_URL;
+        return;
+    }
+
+    const quantityInput = document.querySelector("#productQuantity");
+    const quantity = quantityInput ? parseInt(quantityInput.value, 10) || 1 : 1;
+
+    const buyNowData = {
+        productId: productId,
+        quantity: quantity
+    };
+    sessionStorage.setItem("buyNowItem", JSON.stringify(buyNowData));
+
+    // Điều hướng tới payment.html cùng cấp
+    window.location.href = "payment.html";
+}
+
+// Gắn sự kiện Mua Ngay ngay khi trang load, không phụ thuộc vào kết quả gọi API
+function setupBuyNow(productId) {
+    const buyNowBtn = document.querySelector(".btn-buy-now, .btn-primary-action, .btn-buy");
+    if (!buyNowBtn) return;
+
+    buyNowBtn.addEventListener("click", (e) => {
+        // Luôn chặn thẻ <a href="payment.html"> đi thẳng, tránh sang payment khi chưa lưu dữ liệu
+        e.preventDefault();
+
+        if (!productId || !/^\d+$/.test(productId)) {
+            alert("Không xác định được sản phẩm để mua. Vui lòng mở lại từ trang danh sách.");
+            return;
+        }
+        handleBuyNow(Number(productId));
+    });
+}
+
 function setText(selector, value) {
     const element = document.querySelector(selector);
     if (element) element.textContent = value || "Chưa cập nhật";
@@ -19,6 +72,9 @@ function setSpec(index, value) {
 async function loadProduct() {
     const id = new URLSearchParams(window.location.search).get("id");
     const main = document.querySelector(".comic-detail-section");
+
+    setupBuyNow(id);
+
     if (!id || !/^\d+$/.test(id)) {
         if (main) main.innerHTML = `<p role="alert">Đường dẫn sản phẩm không hợp lệ.</p>`;
         return;
@@ -31,8 +87,6 @@ async function loadProduct() {
             ? product.images.map((image) => image.imageUrl)
             : product.imageUrls || [];
         const mainImage = document.querySelector(".primary-preview-img");
-        const imageContainer = document.querySelector(".aspect-container");
-        const thumbnails = document.querySelector(".thumbnail-strip");
 
         document.title = `${product.title} | ComicHub`;
         setText(".comic-main-title", product.title);
@@ -51,64 +105,119 @@ async function loadProduct() {
 
         const description = document.querySelector(".synopsis-paragraph");
         if (description) description.textContent = product.description || "Người bán chưa cung cấp mô tả chi tiết.";
-        document.querySelector(".ai-inspection-card")?.remove();
-        document.querySelector(".tag-live-viewers")?.remove();
-        document.querySelector(".seller-stats-row")?.remove();
-        document.querySelector(".seller-location")?.remove();
-        document.querySelector(".original-price")?.remove();
-        document.querySelector(".discount-badge")?.remove();
 
-        const tradeSection = document.querySelector(".barter-offer-card");
-        const exchangeButton = document.querySelector(".btn-propose-exchange");
-        const isTrade = product.listingType === "TRADE";
-        if (tradeSection) tradeSection.hidden = !isTrade;
-        if (exchangeButton) exchangeButton.hidden = !isTrade;
-        const barterDescription = document.querySelector(".barter-description");
-        if (barterDescription && product.tradeWishNote) barterDescription.textContent = product.tradeWishNote;
-
-        if (mainImage) {
-            if (images.length) {
-                mainImage.src = images[0];
-                mainImage.alt = product.title;
-                mainImage.hidden = false;
-                imageContainer?.querySelector(".catalog-empty-image")?.remove();
-            } else {
-                mainImage.removeAttribute("src");
-                mainImage.hidden = true;
-                if (imageContainer) {
-                    const placeholder = document.createElement("p");
-                    placeholder.className = "catalog-empty-image";
-                    placeholder.textContent = "Người bán chưa cung cấp ảnh sản phẩm.";
-                    imageContainer.prepend(placeholder);
-                }
-            }
+        if (mainImage && images.length) {
+            mainImage.src = images[0];
+            mainImage.alt = product.title;
+            mainImage.hidden = false;
         }
 
-        if (thumbnails) {
-            thumbnails.replaceChildren(...images.map((url, index) => {
-                const button = document.createElement("button");
-                const image = document.createElement("img");
-                button.type = "button";
-                button.className = `thumb-item${index === 0 ? " active" : ""}`;
-                image.src = url;
-                image.alt = `${product.title} - ảnh ${index + 1}`;
-                button.append(image);
-                button.addEventListener("click", () => {
-                    if (mainImage) mainImage.src = url;
-                    thumbnails.querySelectorAll(".thumb-item").forEach((item) => item.classList.toggle("active", item === button));
-                });
-                return button;
-            }));
-            thumbnails.hidden = !images.length;
-        }
-
-        const sellerShelf = document.querySelector(".btn-view-shelf");
-        if (sellerShelf) sellerShelf.href = `category.html?seller=${encodeURIComponent(product.sellerName || "")}`;
         const detailSection = document.querySelector(".comic-detail-section");
         detailSection?.setAttribute("data-product-id", String(product.id));
+        // Tải sản phẩm gợi ý dựa trên sản phẩm hiện tại
+        await loadRecommendations(product.id);
     } catch (error) {
         if (main) main.innerHTML = `<p role="alert">${escapeHtml(friendlyApiError(error))}</p>`;
     }
 }
+// Tải danh sách sản phẩm gợi ý
+async function loadRecommendations(productId) {
+    const container = document.querySelector("#relatedProducts");
 
+    if (!container) return;
+
+    container.innerHTML = "<p>Đang tải sản phẩm gợi ý...</p>";
+
+    try {
+        const result = await apiRequest(
+            `/api/products/${encodeURIComponent(productId)}/recommendations`
+        );
+
+        const products = result.data;
+
+        if (!Array.isArray(products) || products.length === 0) {
+            container.innerHTML = `
+                <p>Hiện chưa có sản phẩm gợi ý.</p>
+            `;
+            return;
+        }
+
+        container.innerHTML = products.map(product => {
+            const imageUrl = product.images?.length
+                ? product.images[0].imageUrl
+                : product.imageUrls?.[0];
+
+            const safeImageUrl = imageUrl &&
+                /^https?:\/\//i.test(imageUrl)
+                ? escapeHtml(imageUrl)
+                : "https://placehold.co/600x900/png?text=No+Image";
+
+            const productUrl = new URL(window.location.href);
+            productUrl.searchParams.set("id", product.id);
+
+            let listingBadge = "";
+
+            if (product.listingType === "SELL_AND_TRADE") {
+                listingBadge = `
+                    <span class="barter-badge">Bán & Đổi</span>
+                `;
+            } else if (product.listingType === "TRADE") {
+                listingBadge = `
+                    <span class="barter-badge">Trao đổi</span>
+                `;
+            } else {
+                listingBadge = `
+                    <span class="direct-sale-badge">Bán trực tiếp</span>
+                `;
+            }
+
+            return `
+                <article class="comic-card">
+                    <a href="${escapeHtml(productUrl.href)}">
+                        <div class="card-cover-wrap">
+                            <img
+                                src="${safeImageUrl}"
+                                alt="${escapeHtml(product.title)}"
+                                loading="lazy"
+                            >
+
+                            <span class="condition-tag">
+                                ${escapeHtml(conditionText(product.conditionPercent))}
+                            </span>
+                        </div>
+                    </a>
+
+                    <div class="card-body">
+                        <span class="card-category">
+                            ${escapeHtml(product.categoryName || "Chưa phân loại")}
+                        </span>
+
+                        <a href="${escapeHtml(productUrl.href)}">
+                            <h3 class="card-title">
+                                ${escapeHtml(product.title)}
+                            </h3>
+                        </a>
+
+                        <div class="card-footer">
+                            <span class="card-price">
+                                ${formatVnd(product.price)}
+                            </span>
+
+                            <span class="card-meta">
+                                ${listingBadge}
+                            </span>
+                        </div>
+                    </div>
+                </article>
+            `;
+        }).join("");
+
+    } catch (error) {
+        console.error("Lỗi tải sản phẩm gợi ý:", error);
+
+        container.innerHTML = `
+            <p>Không thể tải sản phẩm gợi ý. Vui lòng thử lại.</p>
+        `;
+    }
+}
 document.addEventListener("DOMContentLoaded", loadProduct);

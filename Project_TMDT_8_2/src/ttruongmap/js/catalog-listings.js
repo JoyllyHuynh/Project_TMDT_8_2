@@ -36,6 +36,11 @@ function renderRow(product) {
             <td>${escapeHtml(statusLabel(product))}</td>
             <td style="text-align:right">
                 <a class="btn btn-secondary btn-sm" href="../chinh-sua-bai-dang/index.html?id=${encodeURIComponent(product.id)}">Sửa</a>
+                <button type="button" class="btn btn-secondary btn-sm" data-visibility-id="${escapeHtml(product.id)}"
+                    data-next-active="${product.active ? "false" : "true"}"
+                    ${!product.active && product.moderationStatus !== "APPROVED" ? "disabled title=\"Chỉ hiện sản phẩm đã được duyệt\"" : ""}>
+                    ${product.active ? "Ẩn" : "Hiện"}
+                </button>
                 <button type="button" class="btn btn-danger btn-sm" data-delete-id="${escapeHtml(product.id)}">Xóa</button>
             </td>
         </tr>`;
@@ -132,6 +137,28 @@ window.bulkHideSelected = async () => {
 window.resetSampleData = () => showMessage("Dữ liệu mẫu không được nạp. Danh sách lấy trực tiếp từ tài khoản của bạn.");
 
 document.getElementById("postsTableBody")?.addEventListener("click", async (event) => {
+    const visibilityButton = event.target.closest("[data-visibility-id]");
+    if (visibilityButton) {
+        const id = visibilityButton.dataset.visibilityId;
+        const active = visibilityButton.dataset.nextActive === "true";
+        const product = products.find((item) => String(item.id) === id);
+        if (!product) return;
+        visibilityButton.disabled = true;
+        try {
+            const response = await apiRequest(`/api/products/${encodeURIComponent(id)}/visibility`, {
+                method: "PATCH",
+                body: { active }
+            });
+            products = products.map((item) => String(item.id) === id ? response.data : item);
+            showMessage(response.message || (active ? "Đã hiện sản phẩm." : "Đã ẩn sản phẩm."));
+            render();
+        } catch (error) {
+            showMessage(friendlyApiError(error), true);
+            visibilityButton.disabled = false;
+        }
+        return;
+    }
+
     const button = event.target.closest("[data-delete-id]");
     if (!button) return;
     const product = products.find((item) => String(item.id) === button.dataset.deleteId);

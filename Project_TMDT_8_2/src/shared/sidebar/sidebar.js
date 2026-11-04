@@ -1,4 +1,19 @@
 // Renders shared navigation from the current role stored by the host application.
+
+(function () {
+    // If logoutUser is not yet defined, try to dynamically load our shared logout script.
+    if (typeof window.logoutUser !== "function") {
+        try {
+            const script = document.createElement("script");
+            script.src = "../../shared/logout/logout.js";
+            script.async = false; // ensure it's available synchronously for immediate calls
+            document.head.appendChild(script);
+        } catch (e) {
+            // ignore; we'll fallback to internal logout implementation below
+        }
+    }
+})();
+
 const commonGroups = [
     { title: "Tài khoản & Khám phá", items: [
         ["◈", "Trang Chủ ComicHub", "../../tin/html/home.html"],
@@ -77,7 +92,18 @@ function renderGroup(group, currentPath) {
     return section;
 }
 
+/**
+ * logout: nếu window.logoutUser tồn tại (tạo bởi logout.js) -> gọi nó.
+ * Nếu không, fallback giống cũ: xóa một số khóa và redirect
+ */
 function logout() {
+    if (typeof window.logoutUser === "function") {
+        // Nếu logoutUser muốn đường dẫn khác, chỉnh tham số ở đây
+        window.logoutUser("../../vu/auth/login/login.html");
+        return;
+    }
+
+    // fallback cũ (nếu logout script chưa được nạp)
     const keysToClear = [
         "bookmooch_session",
         "bookmooch_profile",
@@ -87,9 +113,15 @@ function logout() {
         "rememberMe"
     ];
     keysToClear.forEach((key) => {
-        localStorage.removeItem(key);
-        sessionStorage.removeItem(key);
+        try { localStorage.removeItem(key); } catch (e) {}
+        try { sessionStorage.removeItem(key); } catch (e) {}
     });
+
+    // admin mock keys
+    try { localStorage.removeItem("bm_admin_session"); } catch (e) {}
+    try { localStorage.removeItem("bm_admin_role"); } catch (e) {}
+    try { localStorage.removeItem("bm_admin_name"); } catch (e) {}
+
     window.location.href = "../../vu/auth/login/login.html";
 }
 
