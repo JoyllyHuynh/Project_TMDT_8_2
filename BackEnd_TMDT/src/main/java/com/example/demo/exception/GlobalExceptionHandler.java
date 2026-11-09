@@ -12,7 +12,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-
+import org.springframework.security.access.AccessDeniedException;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,16 +37,16 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleUnreadableMessage(
             HttpMessageNotReadableException ex
     ) {
-        Throwable cause = ex.getMostSpecificCause();
-
-        String message = "Dữ liệu JSON không hợp lệ.";
-
-        if (cause != null && cause.getMessage() != null) {
-            message += " Chi tiết: " + cause.getMessage();
-        }
-
         return ResponseEntity.badRequest()
-                .body(ApiResponse.fail(message));
+                .body(ApiResponse.fail("Dữ liệu JSON không hợp lệ."));
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccessDenied(
+            AccessDeniedException ex
+    ) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.fail("Bạn không có quyền thực hiện thao tác này."));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)

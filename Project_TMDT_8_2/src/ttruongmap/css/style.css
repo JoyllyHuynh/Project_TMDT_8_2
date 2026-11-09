@@ -771,7 +771,10 @@ input[type="radio"], input[type="checkbox"] {
 }
 
 .modal-backdrop.show {
-  display: flex;
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto;
 }
 
 .modal-box {

@@ -61,6 +61,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST,
                                 "/api/auth/register",
                                 "/api/auth/login",
+                                "/api/auth/google",
                                 "/api/auth/forgot-password",
                                 "/api/auth/reset-password"
                         ).permitAll()
@@ -83,6 +84,7 @@ public class SecurityConfig {
                         ).permitAll()
 
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/seller/**").authenticated()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(exceptions -> exceptions
