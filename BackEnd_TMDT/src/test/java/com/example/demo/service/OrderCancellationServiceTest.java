@@ -23,6 +23,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class OrderCancellationServiceTest {
@@ -31,6 +32,7 @@ class OrderCancellationServiceTest {
     private static final Long CHECKOUT_ID = 70L;
     private static final Long PRODUCT_ID = 90L;
     private static final Long BUYER_ID = 10L;
+
 
     @AfterEach
     void clearSecurityContext() {
@@ -146,7 +148,8 @@ class OrderCancellationServiceTest {
                 historyRepository,
                 mock(RefundRepository.class),
                 mock(PaymentAllocationRepository.class),
-                notificationRepository
+                notificationRepository,
+                mock(PaymentRepository.class)
         );
     }
 

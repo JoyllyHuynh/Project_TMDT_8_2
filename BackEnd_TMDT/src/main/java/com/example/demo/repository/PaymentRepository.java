@@ -16,6 +16,12 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     List<Payment> findByCheckout(CheckoutBatch checkout);
 
+    Optional<Payment> findByIdempotencyKey(String idempotencyKey);
+
+    Optional<Payment> findFirstByCheckoutOrderByCreatedAtDesc(
+                CheckoutBatch checkout
+    );
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             SELECT p FROM Payment p

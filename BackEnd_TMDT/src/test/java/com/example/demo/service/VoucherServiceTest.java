@@ -2,6 +2,8 @@ package com.example.demo.service;
 
 import com.example.demo.dto.voucher.VoucherValidateRequest;
 import com.example.demo.dto.voucher.VoucherValidateResponse;
+import com.example.demo.dto.voucher.VoucherAvailableRequest;
+import com.example.demo.dto.voucher.VoucherAvailableResponse;
 import com.example.demo.exception.ApiException;
 import com.example.demo.model.Order;
 import com.example.demo.model.Product;
@@ -27,6 +29,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -106,6 +109,63 @@ class VoucherServiceTest {
         assertMoney("0.00", response.getTotalDiscount());
         assertMoney("120.00", response.getTotalAmount());
         verify(voucherUsageRepository, never()).save(any());
+    }
+
+    @Test
+    void listsOnlyActiveVouchersEligibleForTheCurrentBuyerAndProduct() {
+        Voucher platform = voucher(VoucherType.PLATFORM, VoucherDiscountType.PERCENTAGE, "10");
+        platform.setId(1L);
+        platform.setCode("PLATFORM-OK");
+        platform.setMaxDiscountAmount(new BigDecimal("15.00"));
+
+        Voucher seller = voucher(VoucherType.SELLER, VoucherDiscountType.FIXED, "10");
+        seller.setId(2L);
+        seller.setCode("SELLER-OK");
+        seller.setSeller(user(SELLER_ID));
+
+        Voucher expired = voucher(VoucherType.PLATFORM, VoucherDiscountType.FIXED, "5");
+        expired.setId(3L);
+        expired.setCode("EXPIRED");
+        expired.setEndAt(LocalDateTime.now().minusMinutes(1));
+
+        Voucher minimumNotMet = voucher(VoucherType.PLATFORM, VoucherDiscountType.FIXED, "5");
+        minimumNotMet.setId(4L);
+        minimumNotMet.setCode("MINIMUM-NOT-MET");
+        minimumNotMet.setMinOrderAmount(new BigDecimal("101.00"));
+
+        Voucher sellerMismatch = voucher(VoucherType.SELLER, VoucherDiscountType.FIXED, "5");
+        sellerMismatch.setId(5L);
+        sellerMismatch.setCode("OTHER-SELLER");
+        sellerMismatch.setSeller(user(SELLER_ID + 1));
+
+        Voucher userLimitReached = voucher(VoucherType.PLATFORM, VoucherDiscountType.FIXED, "5");
+        userLimitReached.setId(6L);
+        userLimitReached.setCode("USER-LIMIT");
+        userLimitReached.setUsageLimitPerUser(1);
+
+        Voucher globalLimitReached = voucher(VoucherType.PLATFORM, VoucherDiscountType.FIXED, "5");
+        globalLimitReached.setId(7L);
+        globalLimitReached.setCode("GLOBAL-LIMIT");
+        globalLimitReached.setUsageLimit(1);
+        globalLimitReached.setUsedCount(1);
+
+        when(voucherRepository.findAllByActiveTrueOrderByEndAtAsc()).thenReturn(List.of(
+                platform, seller, expired, minimumNotMet, sellerMismatch,
+                userLimitReached, globalLimitReached
+        ));
+        when(voucherUsageRepository.countByVoucherIdAndUserId(6L, BUYER_ID)).thenReturn(1L);
+
+        VoucherAvailableRequest request = new VoucherAvailableRequest();
+        request.setProductId(1L);
+        request.setQuantity(1);
+        request.setShippingMethod(ShippingMethod.STANDARD);
+
+        List<VoucherAvailableResponse> available = voucherService.getAvailableVouchers(request);
+
+        assertEquals(List.of("PLATFORM-OK", "SELLER-OK"),
+                available.stream().map(VoucherAvailableResponse::getCode).sorted().toList());
+        assertEquals(VoucherDiscountType.PERCENTAGE, available.get(0).getDiscountType());
+        assertEquals(new BigDecimal("15.00"), available.get(0).getMaxDiscountAmount());
     }
 
     @Test

@@ -32,7 +32,8 @@ public class OrderCancellationService {
     private final RefundRepository refundRepository;
     private final PaymentAllocationRepository paymentAllocationRepository;
     private final NotificationRepository notificationRepository;
-
+    private final PaymentRepository paymentRepository;
+    
     @Transactional
     public OrderResponse cancelOrder(Long orderId) {
         Order orderSnapshot = orderRepository.findById(orderId)
@@ -52,7 +53,14 @@ public class OrderCancellationService {
         }
 
         if (order.getStatus() == OrderStatus.CANCELLED) {
-            return OrderResponse.from(order, orderItemRepository.findByOrder(order));
+            List<OrderItem> items = orderItemRepository.findByOrder(order);
+
+            String paymentCode = paymentRepository
+                    .findFirstByCheckoutOrderByCreatedAtDesc(order.getCheckout())
+                    .map(Payment::getPaymentCode)
+                    .orElse(null);
+
+            return OrderResponse.from(order, items, paymentCode);
         }
 
         if (!isCancellable(order.getStatus())) {
@@ -90,7 +98,12 @@ public class OrderCancellationService {
         createCancellationNotifications(order, buyer);
         orderRepository.save(order);
 
-        return OrderResponse.from(order, items);
+        String paymentCode = paymentRepository
+                .findFirstByCheckoutOrderByCreatedAtDesc(order.getCheckout())
+                .map(Payment::getPaymentCode)
+                .orElse(null);
+
+        return OrderResponse.from(order, items, paymentCode);
     }
 
     private boolean isCancellable(OrderStatus status) {

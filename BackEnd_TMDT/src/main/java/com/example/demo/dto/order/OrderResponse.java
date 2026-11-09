@@ -27,11 +27,12 @@ public class OrderResponse {
     private String shippingAddress;
     private String buyerNote;
     private OrderStatus status;
+    private String paymentCode;
     private OrderPaymentStatus paymentStatus;
     private LocalDateTime createdAt;
     private List<OrderItemResponse> items;
 
-    public static OrderResponse from(Order order, List<OrderItem> items) {
+    public static OrderResponse from(Order order, List<OrderItem> items, String paymentCode) {
         return OrderResponse.builder()
                 .id(order.getId())
                 .orderCode(order.getOrderCode())
@@ -46,6 +47,7 @@ public class OrderResponse {
                 .buyerNote(order.getBuyerNote())
                 .status(order.getStatus())
                 .paymentStatus(order.getPaymentStatus())
+                .paymentCode(paymentCode)
                 .createdAt(order.getCreatedAt())
                 .items(items.stream().map(OrderItemResponse::from).toList())
                 .build();

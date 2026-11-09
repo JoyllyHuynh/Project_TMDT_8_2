@@ -172,18 +172,25 @@
 
         <!-- FILTER TABS & SEARCH -->
         <div class="card">
-          <div class="filter-tabs" id="voucherTabs">
+          <div class="filter-tabs" id="voucherTabs">  
             <button class="filter-tab active" onclick="filterVouchers('all', this)">
-              Tất cả voucher (<span id="countVoucherAll">0</span>)
+                Tất cả voucher (<span id="countVoucherAll">0</span>)
             </button>
+
             <button class="filter-tab" onclick="filterVouchers('active', this)">
-              Đang diễn ra (<span id="countVoucherActive">0</span>)
+                Đang diễn ra (<span id="countVoucherActive">0</span>)
             </button>
+
             <button class="filter-tab" onclick="filterVouchers('upcoming', this)">
-              Sắp diễn ra (<span id="countVoucherUpcoming">0</span>)
+                Sắp diễn ra (<span id="countVoucherUpcoming">0</span>)
             </button>
+
+            <button class="filter-tab" onclick="filterVouchers('paused', this)">
+                Tạm dừng (<span id="countVoucherPaused">0</span>)
+            </button>
+
             <button class="filter-tab" onclick="filterVouchers('expired', this)">
-              Đã kết thúc (<span id="countVoucherExpired">0</span>)
+                Đã kết thúc (<span id="countVoucherExpired">0</span>)
             </button>
           </div>
 
@@ -813,12 +820,16 @@
       document.getElementById('countVoucherAll').innerText = vouchers.length;
       document.getElementById('countVoucherActive').innerText = activeCount;
       document.getElementById('countVoucherUpcoming').innerText = vouchers.filter(v => v.status === 'upcoming').length;
-      document.getElementById('countVoucherExpired').innerText = vouchers.filter(v => v.status === 'expired' || v.status === 'paused').length;
+      document.getElementById('countVoucherPaused').innerText =
+          vouchers.filter(v => v.status === 'paused').length;
+
+      document.getElementById('countVoucherExpired').innerText =
+          vouchers.filter(v => v.status === 'expired').length;
 
       let filtered = vouchers.filter(v => {
-        if (currentVoucherFilter === 'all') return true;
-        if (currentVoucherFilter === 'expired') return v.status === 'expired' || v.status === 'paused';
-        return v.status === currentVoucherFilter;
+          if (currentVoucherFilter === 'all') return true;
+
+          return v.status === currentVoucherFilter;
       });
 
       const container = document.getElementById('voucherGridContainer');

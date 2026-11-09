@@ -13,6 +13,7 @@ import com.example.demo.model.enums.UserRole;
 import com.example.demo.repository.CheckoutBatchRepository;
 import com.example.demo.repository.OrderItemRepository;
 import com.example.demo.repository.OrderRepository;
+import com.example.demo.repository.PaymentRepository;
 import com.example.demo.repository.ProductImageRepository;
 import com.example.demo.repository.ProductRepository;
 import com.example.demo.repository.UserRepository;
@@ -69,7 +70,8 @@ class OrderVoucherIdempotencyTest {
                 productRepository,
                 userRepository,
                 mock(ProductImageRepository.class),
-                checkoutBatchRepository,
+                mock(PaymentRepository.class), // Dependency mới
+                checkoutBatchRepository,       // Sửa tại đây
                 mock(VoucherRepository.class),
                 voucherService,
                 mock(VoucherUsageRepository.class),

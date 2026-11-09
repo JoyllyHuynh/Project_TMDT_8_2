@@ -18,7 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.example.demo.model.enums.CheckoutBatchStatus;
 import java.time.LocalDateTime;
-
+import com.example.demo.model.enums.GatewayPaymentStatus;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
@@ -33,7 +33,7 @@ public class OrderService {
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
     private final ProductImageRepository productImageRepository;
-
+    private final PaymentRepository paymentRepository;
     private final CheckoutBatchRepository checkoutBatchRepository;
     private final VoucherRepository voucherRepository;
     private final VoucherService voucherService;
@@ -78,18 +78,30 @@ public class OrderService {
                 List<OrderItem> existingItems =
                         orderItemRepository.findByOrder(existingOrder);
 
-                return OrderResponse.from(existingOrder, existingItems);
+                String paymentCode = getLatestPaymentCode(checkout);
+
+                return OrderResponse.from(
+                        existingOrder,
+                        existingItems,
+                        paymentCode
+                );
             }
 
             // Checkout đang chờ thanh toán và chưa hết hạn: trả về đơn cũ.
             if (checkout.getStatus() == CheckoutBatchStatus.PENDING
-                    && checkout.getExpiresAt().isAfter(LocalDateTime.now())) {
+                        && checkout.getExpiresAt().isAfter(LocalDateTime.now())) {
 
                 List<OrderItem> existingItems =
                         orderItemRepository.findByOrder(existingOrder);
 
-                return OrderResponse.from(existingOrder, existingItems);
-            }
+                String paymentCode = getLatestPaymentCode(checkout);
+
+                return OrderResponse.from(
+                        existingOrder,
+                        existingItems,
+                        paymentCode
+                );
+                }
 
             throw ApiException.badRequest(
                     "Checkout đã hết hạn hoặc đã bị hủy. Vui lòng tạo yêu cầu mới."
@@ -176,6 +188,20 @@ public class OrderService {
         // Đồng bộ tổng tiền CheckoutBatch
         savedCheckout.setTotalAmount(voucherResult.getTotalAmount());
 
+        // 9. Tạo Payment cho CheckoutBatch
+        Payment payment = new Payment();
+
+        payment.setPaymentCode(CodeGenerator.code("PAY"));
+        payment.setCheckout(savedCheckout);
+        payment.setMethod(request.getPaymentMethod());
+        payment.setAmount(voucherResult.getTotalAmount());
+        payment.setStatus(GatewayPaymentStatus.PENDING);
+        payment.setIdempotencyKey(
+                "PAY-" + savedCheckout.getCheckoutCode()
+        );
+
+        paymentRepository.save(payment);
+
         // 5. Khởi tạo Chi tiết đơn hàng (OrderItem)
         OrderItem orderItem = new OrderItem();
         orderItem.setOrder(savedOrder);
@@ -191,7 +217,7 @@ public class OrderService {
         orderItem.setQuantity(request.getQuantity());
         OrderItem savedItem = orderItemRepository.save(orderItem);
 
-        return OrderResponse.from(savedOrder, List.of(savedItem));
+        return OrderResponse.from(savedOrder, List.of(savedItem), payment.getPaymentCode());
     }
 
     @Transactional(readOnly = true)
@@ -213,11 +239,30 @@ public class OrderService {
                             || (order.getSeller() != null && order.getSeller().getFullName() != null && order.getSeller().getFullName().toLowerCase().contains(kw));
                 })
                 .map(order -> {
-                    List<OrderItem> items = orderItemRepository.findByOrder(order);
-                    return OrderResponse.from(order, items);
+                        List<OrderItem> items = orderItemRepository.findByOrder(order);
+
+                        String paymentCode = getLatestPaymentCodeOrNull(order.getCheckout());
+
+                        return OrderResponse.from(order, items, paymentCode);
                 })
                 .collect(Collectors.toList());
     }
+
+    private String getLatestPaymentCode(CheckoutBatch checkout) {
+        return paymentRepository
+                .findFirstByCheckoutOrderByCreatedAtDesc(checkout)
+                .map(Payment::getPaymentCode)
+                .orElseThrow(() -> ApiException.notFound(
+                        "Không tìm thấy giao dịch thanh toán."
+                ));
+    }
+
+    private String getLatestPaymentCodeOrNull(CheckoutBatch checkout) {
+        return paymentRepository
+                .findFirstByCheckoutOrderByCreatedAtDesc(checkout)
+                .map(Payment::getPaymentCode)
+                .orElse(null);
+        }
 
     @Transactional(readOnly = true)
     public List<ChatbotOrderSummary> getChatbotOrderSummaries() {

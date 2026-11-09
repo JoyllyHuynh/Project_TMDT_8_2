@@ -1,30 +1,50 @@
 import { apiRequest } from "../../shared/api-client.js";
-
+const PENDING_PAYMENT_STORAGE_KEY = "comichub_pending_payment";
 const VOUCHER_STORAGE_KEY = "comichub_checkout_voucher_codes";
+const ADDRESS_RETURN_STORAGE_KEY = "comichub_checkout_address_return";
 
 const state = {
     productId: null,
     quantity: null,
     buyNowItem: null,
+    checkoutSessionId: null,
     idempotencyKey: null,
     submissionFingerprint: null,
     checkoutRequestSnapshot: null,
     submissionSucceeded: false,
+
+    pendingPayment: null,
+
     product: null,
     address: null,
+    addressStatus: "loading",
+    addressError: "",
+    addressRequestId: 0,
+    addressOptions: [],
+    selectedAddressId: "",
+    addressModalStatus: "idle",
+    addressModalError: "",
+    addressModalRequestId: 0,
     voucherCodes: {
         platformCode: null,
         sellerCode: null,
         shippingCode: null
     },
+    availableVouchers: [],
+    voucherFilter: "ALL",
+    voucherListStatus: "idle",
+    voucherListError: "",
+    voucherListRequestId: 0,
     quote: null,
     quotePayloadFingerprint: null,
     quoteRequestId: 0,
     quotePending: false,
+    quoteError: "",
     submitting: false
 };
 
 document.addEventListener("DOMContentLoaded", initializeCheckout);
+window.addEventListener("pageshow", handleCheckoutPageShow);
 
 async function initializeCheckout() {
     const checkoutButton = document.querySelector(".btn-submit-checkout");
@@ -34,8 +54,7 @@ async function initializeCheckout() {
 
     const packageCard = document.querySelector(".package-summary-card");
     if (packageCard) packageCard.innerHTML = `<p role="status">Đang tải sản phẩm...</p>`;
-    const summary = document.querySelector(".summary-breakdown-list");
-    if (summary) summary.innerHTML = `<p role="status">Đang chờ báo giá từ máy chủ...</p>`;
+    renderQuote();
     const paymentAmount = document.querySelector(".highlight-amount");
     if (paymentAmount) paymentAmount.textContent = "—";
 
@@ -62,6 +81,36 @@ async function initializeCheckout() {
     }
 
     state.buyNowItem = buyNowItem;
+    if (typeof buyNowItem.checkoutSessionId !== "string"
+        || !buyNowItem.checkoutSessionId.trim()) {
+        try {
+            buyNowItem.checkoutSessionId = createCheckoutSessionId();
+            if (!saveBuyNowItem()) {
+                throw new Error("Không thể lưu mã phiên checkout.");
+            }
+        } catch (error) {
+            showMessage(error.message || "Không thể khôi phục phiên checkout an toàn.", "error");
+            return;
+        }
+    }
+    state.checkoutSessionId = buyNowItem.checkoutSessionId;
+
+    const pendingPayment = readPendingPayment();
+    if (pendingPayment?.checkoutSessionId === state.checkoutSessionId) {
+        state.pendingPayment = pendingPayment;
+        state.submissionSucceeded = true;
+        renderMockPaymentPanel(pendingPayment);
+        updateCheckoutButton();
+        return;
+    }
+    if (pendingPayment) {
+        try {
+            sessionStorage.removeItem(PENDING_PAYMENT_STORAGE_KEY);
+        } catch (error) {
+            console.error("Không thể xóa trạng thái thanh toán cũ:", error);
+        }
+    }
+
     state.submissionFingerprint = typeof buyNowItem.checkoutRequestFingerprint === "string"
         ? buyNowItem.checkoutRequestFingerprint
         : null;
@@ -98,7 +147,10 @@ async function initializeCheckout() {
     }
 
     try {
-        const response = await apiRequest(`/api/products/${state.productId}`);
+        const response = await withTimeout(
+            apiRequest(`/api/products/${state.productId}`),
+            "Hết thời gian chờ tải thông tin sản phẩm."
+        );
         state.product = response.data;
         if (!state.product) throw new Error("Không tìm thấy dữ liệu sản phẩm.");
         renderProduct();
@@ -108,21 +160,7 @@ async function initializeCheckout() {
         return;
     }
 
-    try {
-        const response = await apiRequest("/api/addresses");
-        const addresses = Array.isArray(response.data) ? response.data : [];
-        state.address = state.checkoutRequestSnapshot
-            ? addressFromCheckoutRequest(state.checkoutRequestSnapshot)
-            : addresses.find((address) => address.isDefault) || addresses[0] || null;
-        renderAddress();
-    } catch (error) {
-        showMessage(
-            error.status === 401
-                ? "Phiên đăng nhập đã hết hạn hoặc bạn chưa đăng nhập. Vui lòng đăng nhập lại."
-                : `Không thể tải địa chỉ nhận hàng: ${error.message || "Vui lòng thử lại."}`,
-            "error"
-        );
-    }
+    await loadCheckoutAddress();
 
     try {
         await refreshQuote(state.voucherCodes, false);
@@ -147,7 +185,7 @@ async function initializeCheckout() {
             renderAppliedVouchers();
             showMessage(`Mã đã chọn chưa được xác nhận: ${error.message || "Vui lòng kiểm tra lại mã."}`, "error");
             try {
-                await refreshQuote(state.voucherCodes, false);
+                await refreshQuote(state.voucherCodes, true);
             } catch (quoteError) {
                 showMessage(`Không thể tính đơn hàng: ${quoteError.message || "Vui lòng thử lại."}`, "error");
             }
@@ -163,6 +201,7 @@ function bindCheckoutControls() {
     const checkoutButton = document.querySelector(".btn-submit-checkout");
 
     applyButton?.addEventListener("click", applyVoucher);
+    voucherInput?.addEventListener("click", openVoucherModal);
     voucherInput?.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
             event.preventDefault();
@@ -173,12 +212,214 @@ function bindCheckoutControls() {
     document.querySelectorAll('input[name="shipping_method"]').forEach((input) => {
         input.addEventListener("change", () => {
             refreshQuote(state.voucherCodes, true).catch((error) => {
-                showMessage(`Không thể cập nhật phí vận chuyển: ${error.message || "Vui lòng thử lại."}`, "error");
+                handleQuoteChangeFailure(error, "Không thể cập nhật phí vận chuyển.");
             });
+            if (!document.querySelector("#voucher-modal")?.hidden) {
+                loadAvailableVouchers();
+            }
         });
     });
 
     checkoutButton?.addEventListener("click", submitCheckout);
+    document.querySelector("#btn-change-address")
+        ?.addEventListener("click", openAddressModal);
+    document.querySelector("#address-modal")
+        ?.addEventListener("click", handleAddressModalClick);
+    document.querySelector("#address-modal-list")
+        ?.addEventListener("change", handleAddressSelection);
+    document.querySelector("#btn-confirm-address")
+        ?.addEventListener("click", confirmSelectedAddress);
+    document.querySelector("#btn-retry-address-modal")
+        ?.addEventListener("click", loadAddressOptions);
+    document.querySelector("#voucher-modal")
+        ?.addEventListener("click", handleVoucherModalClick);
+    document.querySelector("#voucher-modal-list")
+        ?.addEventListener("click", handleAvailableVoucherClick);
+    document.querySelector("#btn-retry-vouchers")
+        ?.addEventListener("click", loadAvailableVouchers);
+    document.querySelector("#btn-apply-manual-modal-voucher")
+        ?.addEventListener("click", applyManualVoucherFromModal);
+    document.querySelector("#voucher-modal-code")
+        ?.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                applyManualVoucherFromModal();
+            }
+        });
+    document.querySelector("#btn-add-address")
+        ?.addEventListener("click", rememberAddressManagementReturn);
+    document.addEventListener("keydown", handleAddressModalKeydown);
+    document.querySelector("#btn-mock-success")
+        ?.addEventListener("click", () => processMockPayment("SUCCESS"));
+
+    document.querySelector("#btn-mock-failed")
+        ?.addEventListener("click", () => processMockPayment("FAILED"));
+
+    document.querySelector("#btn-mock-retry")
+        ?.addEventListener("click", retryMockPayment);
+    document.querySelector("#btn-retry-address")
+        ?.addEventListener("click", loadCheckoutAddress);
+    document.querySelector(".summary-breakdown-list")
+        ?.addEventListener("click", (event) => {
+            if (event.target.closest("#btn-retry-quote")) {
+                refreshQuote(state.voucherCodes, true).catch((error) => {
+                    showMessage(`Không thể tải báo giá: ${error.message || "Vui lòng thử lại."}`, "error");
+                });
+            }
+        });
+}
+
+async function processMockPayment(action) {
+    const payment = state.pendingPayment;
+
+    if (!payment?.paymentCode) {
+        showMockPaymentMessage("Không tìm thấy mã thanh toán.", "error");
+        return;
+    }
+
+    if (!["SUCCESS", "FAILED"].includes(action)) {
+        return;
+    }
+
+    const successButton = document.querySelector("#btn-mock-success");
+    const failedButton = document.querySelector("#btn-mock-failed");
+
+    successButton.disabled = true;
+    failedButton.disabled = true;
+
+    try {
+        const response = await apiRequest(
+            `/api/payments/mock/${encodeURIComponent(payment.paymentCode)}`,
+            {
+                method: "POST",
+                body: { action }
+            }
+        );
+
+        const result = response.data;
+
+        if (!result || !result.status) {
+            throw new Error("Backend trả về dữ liệu thanh toán không hợp lệ.");
+        }
+
+        const updatedPayment = {
+            ...payment,
+            paymentId: result.paymentId ?? payment.paymentId,
+            paymentCode: result.paymentCode ?? payment.paymentCode,
+            amount: result.amount ?? payment.amount,
+            status: result.status,
+            paidAt: result.paidAt ?? null
+        };
+
+        if (!savePendingPayment(updatedPayment)) {
+            throw new Error(
+                "Không thể lưu trạng thái thanh toán vào trình duyệt."
+            );
+        }
+
+        renderMockPaymentPanel(updatedPayment);
+
+        if (result.status === "SUCCEEDED") {
+            const orderCode = typeof updatedPayment.orderCode === "string"
+                ? updatedPayment.orderCode.trim()
+                : "";
+            if (!orderCode) {
+                throw new Error(
+                    "Thanh toán thành công nhưng không tìm thấy mã đơn hàng để mở trang theo dõi."
+                );
+            }
+
+            window.location.href =
+                `../../thuc/html/page3.html?orderCode=${encodeURIComponent(orderCode)}`;
+        } else if (result.status === "FAILED") {
+            showMockPaymentMessage(
+                "Thanh toán thất bại. Bạn có thể thử thanh toán lại.",
+                "error"
+            );
+        } else {
+            throw new Error(`Trạng thái thanh toán không được hỗ trợ: ${result.status}`);
+        }
+    } catch (error) {
+        showMockPaymentMessage(
+            error.message || "Không thể xử lý giao dịch. Vui lòng thử lại.",
+            "error"
+        );
+    } finally {
+        successButton.disabled = false;
+        failedButton.disabled = false;
+
+        renderMockPaymentPanel(state.pendingPayment);
+    }
+}
+
+async function retryMockPayment() {
+    const payment = state.pendingPayment;
+
+    if (!payment?.paymentCode) {
+        showMockPaymentMessage("Không tìm thấy mã thanh toán.", "error");
+        return;
+    }
+
+    const retryButton = document.querySelector("#btn-mock-retry");
+    retryButton.disabled = true;
+
+    try {
+        const response = await apiRequest(
+            `/api/payments/retry/${encodeURIComponent(payment.paymentCode)}`,
+            {
+                method: "POST"
+            }
+        );
+
+        const result = response.data;
+
+        if (!result?.paymentCode || !result?.status) {
+            throw new Error("Backend trả về thông tin thanh toán lại không hợp lệ.");
+        }
+
+        const updatedPayment = {
+            ...payment,
+            paymentId: result.paymentId,
+            paymentCode: result.paymentCode,
+            amount: result.amount ?? payment.amount,
+            status: result.status,
+            paidAt: result.paidAt ?? null
+        };
+
+        if (result.status !== "PENDING") {
+            throw new Error("Giao dịch mới không ở trạng thái chờ thanh toán.");
+        }
+
+        if (!savePendingPayment(updatedPayment)) {
+            throw new Error(
+                "Không thể lưu mã thanh toán mới vào trình duyệt."
+            );
+        }
+
+        renderMockPaymentPanel(updatedPayment);
+
+        showMockPaymentMessage(
+            "Đã tạo giao dịch mới. Bạn có thể tiếp tục thanh toán.",
+            "success"
+        );
+    } catch (error) {
+        showMockPaymentMessage(
+            error.message || "Không thể tạo giao dịch thanh toán lại.",
+            "error"
+        );
+    } finally {
+        retryButton.disabled = false;
+    }
+}
+
+function showMockPaymentMessage(message, type) {
+    const region = document.querySelector("#mock-payment-message");
+
+    if (!region) return;
+
+    region.textContent = message;
+    region.className = `checkout-message ${type}`;
+    region.hidden = false;
 }
 
 function renderProduct() {
@@ -249,8 +490,11 @@ function renderProduct() {
             }
             packageCard.querySelector(".tag-qty").textContent = `SL: ${quantity}`;
             refreshQuote(state.voucherCodes, true).catch((error) => {
-                showMessage(`Không thể cập nhật báo giá: ${error.message || "Vui lòng thử lại."}`, "error");
+                handleQuoteChangeFailure(error, "Không thể cập nhật báo giá.");
             });
+            if (!document.querySelector("#voucher-modal")?.hidden) {
+                loadAvailableVouchers();
+            }
         });
     }
 }
@@ -260,13 +504,38 @@ function renderAddress() {
     const phone = document.querySelector(".recipient-phone");
     const address = document.querySelector(".recipient-address");
     const defaultBadge = document.querySelector(".badge-address-default");
+    const message = document.querySelector("#address-load-message");
+    const retryButton = document.querySelector("#btn-retry-address");
+
+    if (message) {
+        message.textContent = state.addressStatus === "loading"
+            ? "Đang tải địa chỉ nhận hàng..."
+            : state.addressError;
+        message.className = `checkout-message${state.addressStatus === "error" ? " error" : ""}`;
+        message.hidden = !state.addressError && state.addressStatus !== "loading";
+    }
+    if (retryButton) {
+        retryButton.hidden = state.addressStatus !== "error";
+        retryButton.disabled = state.addressStatus === "loading";
+    }
 
     if (!isAddressUsable(state.address)) {
-        if (name) name.textContent = "Chưa có địa chỉ nhận hàng";
+        if (name) name.textContent = state.addressStatus === "loading"
+            ? "Đang tải địa chỉ..."
+            : "Chưa có địa chỉ nhận hàng";
         if (phone) phone.textContent = "";
-        if (address) address.textContent = "Vui lòng thêm tên người nhận, số điện thoại và địa chỉ đầy đủ.";
+        if (address) {
+            address.textContent = state.addressStatus === "loading"
+                ? "Đang tải địa chỉ nhận hàng..."
+                : state.addressStatus === "error"
+                    ? "Không thể tải địa chỉ. Hãy thử lại."
+                    : "Vui lòng thêm tên người nhận, số điện thoại và địa chỉ đầy đủ.";
+        }
         if (defaultBadge) defaultBadge.hidden = true;
-        showMessage("Địa chỉ nhận hàng chưa đầy đủ. Hãy cập nhật địa chỉ rồi quay lại thanh toán.", "error");
+        if (state.addressStatus === "empty") {
+            showMessage("Địa chỉ nhận hàng chưa đầy đủ. Hãy cập nhật địa chỉ rồi quay lại thanh toán.", "error");
+        }
+        updateCheckoutButton();
         return;
     }
 
@@ -284,6 +553,240 @@ function renderAddress() {
     updateCheckoutButton();
 }
 
+async function loadCheckoutAddress() {
+    const requestId = ++state.addressRequestId;
+    state.addressStatus = "loading";
+    state.addressError = "";
+    renderAddress();
+
+    if (state.checkoutRequestSnapshot) {
+        state.address = addressFromCheckoutRequest(state.checkoutRequestSnapshot);
+        state.addressStatus = "ready";
+        renderAddress();
+        return;
+    }
+
+    try {
+        const response = await withTimeout(
+            apiRequest("/api/addresses"),
+            "Hết thời gian chờ tải địa chỉ nhận hàng."
+        );
+        if (requestId !== state.addressRequestId) return;
+        const addresses = Array.isArray(response.data) ? response.data : [];
+        state.address = addresses.find((item) => item?.isDefault) || addresses[0] || null;
+        state.addressStatus = isAddressUsable(state.address) ? "ready" : "empty";
+    } catch (error) {
+        if (requestId !== state.addressRequestId) return;
+        state.address = null;
+        state.addressStatus = "error";
+        state.addressError = error.status === 401 || error.status === 403
+            ? "Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại rồi thử tải địa chỉ."
+            : `Không thể tải địa chỉ nhận hàng: ${error.message || "Vui lòng thử lại."}`;
+    }
+    renderAddress();
+}
+
+async function openAddressModal() {
+    if (state.submitting || state.submissionSucceeded || state.submissionFingerprint) return;
+    const modal = document.querySelector("#address-modal");
+    if (!modal) return;
+
+    modal.hidden = false;
+    document.querySelector("#btn-change-address")?.setAttribute("aria-expanded", "true");
+    document.body.classList.add("modal-open");
+    document.querySelector("#address-modal-title")?.focus();
+    await loadAddressOptions();
+}
+
+async function loadAddressOptions() {
+    const requestId = ++state.addressModalRequestId;
+    state.addressModalStatus = "loading";
+    state.addressModalError = "";
+    renderAddressModal();
+
+    try {
+        const response = await withTimeout(
+            apiRequest("/api/addresses"),
+            "Hết thời gian chờ tải danh sách địa chỉ."
+        );
+        if (requestId !== state.addressModalRequestId) return;
+        if (!Array.isArray(response.data)) {
+            throw new Error("Dữ liệu danh sách địa chỉ từ máy chủ không hợp lệ.");
+        }
+
+        state.addressOptions = response.data;
+        const selectedAddress = state.addressOptions.find(
+            (address) => String(address?.id) === String(state.address?.id)
+        ) || state.addressOptions.find((address) => address?.isDefault)
+            || state.addressOptions[0]
+            || null;
+        state.selectedAddressId = selectedAddress?.id == null ? "" : String(selectedAddress.id);
+        state.addressModalStatus = state.addressOptions.length ? "success" : "empty";
+    } catch (error) {
+        if (requestId !== state.addressModalRequestId) return;
+        state.addressOptions = [];
+        state.selectedAddressId = "";
+        state.addressModalStatus = "error";
+        state.addressModalError = error.status === 401 || error.status === 403
+            ? "Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại."
+            : error.message || "Không thể tải danh sách địa chỉ.";
+    }
+    renderAddressModal();
+}
+
+function renderAddressModal() {
+    const message = document.querySelector("#address-modal-message");
+    const retryButton = document.querySelector("#btn-retry-address-modal");
+    const list = document.querySelector("#address-modal-list");
+    const emptyState = document.querySelector("#address-modal-empty");
+    const confirmButton = document.querySelector("#btn-confirm-address");
+    if (!message || !list || !emptyState) return;
+
+    list.replaceChildren();
+    emptyState.hidden = state.addressModalStatus !== "empty";
+    if (state.addressModalStatus === "loading") {
+        message.textContent = "Đang tải danh sách địa chỉ...";
+        message.className = "address-modal-message loading";
+    } else if (state.addressModalStatus === "error") {
+        message.textContent = state.addressModalError;
+        message.className = "address-modal-message error";
+    } else if (state.addressModalStatus === "empty") {
+        message.textContent = "";
+        message.className = "address-modal-message";
+    } else {
+        message.textContent = "Chọn địa chỉ dùng cho đơn hàng này.";
+        message.className = "address-modal-message";
+        state.addressOptions.forEach((address) => {
+            const label = document.createElement("label");
+            label.className = "address-option";
+            label.classList.toggle(
+                "selected",
+                String(address?.id) === state.selectedAddressId
+            );
+
+            const radio = document.createElement("input");
+            radio.type = "radio";
+            radio.name = "checkout-address-selection";
+            radio.value = address?.id == null ? "" : String(address.id);
+            radio.checked = radio.value === state.selectedAddressId;
+            radio.disabled = !isAddressUsable(address);
+
+            const details = document.createElement("span");
+            details.className = "address-option-details";
+            const recipient = document.createElement("strong");
+            recipient.className = "address-option-recipient";
+            recipient.textContent = address?.recipientName || "Chưa có tên người nhận";
+            const phone = document.createElement("span");
+            phone.className = "address-option-phone";
+            phone.textContent = address?.phone || "Chưa có số điện thoại";
+            const fullAddress = document.createElement("span");
+            fullAddress.className = "address-option-full";
+            fullAddress.textContent = addressText(address) || "Chưa có địa chỉ đầy đủ";
+            details.append(recipient, phone, fullAddress);
+
+            label.append(radio, details);
+            if (address?.isDefault) {
+                const badge = document.createElement("span");
+                badge.className = "address-option-default";
+                badge.textContent = "Mặc định";
+                label.append(badge);
+            }
+            list.append(label);
+        });
+    }
+
+    if (retryButton) retryButton.hidden = state.addressModalStatus !== "error";
+    if (confirmButton) {
+        const selectedAddress = state.addressOptions.find(
+            (address) => String(address?.id) === state.selectedAddressId
+        );
+        confirmButton.disabled = state.addressModalStatus !== "success"
+            || !isAddressUsable(selectedAddress);
+    }
+}
+
+function handleAddressSelection(event) {
+    const radio = event.target.closest('input[name="checkout-address-selection"]');
+    if (!radio) return;
+    state.selectedAddressId = radio.value;
+    document.querySelectorAll(".address-option").forEach((option) => {
+        option.classList.toggle(
+            "selected",
+            option.querySelector('input[name="checkout-address-selection"]')?.checked === true
+        );
+    });
+    const selectedAddress = state.addressOptions.find(
+        (address) => String(address?.id) === state.selectedAddressId
+    );
+    const confirmButton = document.querySelector("#btn-confirm-address");
+    if (confirmButton) confirmButton.disabled = !isAddressUsable(selectedAddress);
+}
+
+function confirmSelectedAddress() {
+    const selectedAddress = state.addressOptions.find(
+        (address) => String(address?.id) === state.selectedAddressId
+    );
+    if (!isAddressUsable(selectedAddress)) return;
+
+    state.address = selectedAddress;
+    state.addressStatus = "ready";
+    state.addressError = "";
+    renderAddress();
+    closeAddressModal();
+
+    if (Object.values(state.voucherCodes).some(Boolean)) {
+        refreshQuote(state.voucherCodes, true).catch((error) => {
+            handleQuoteChangeFailure(error, "Không thể xác nhận lại voucher sau khi đổi địa chỉ.");
+        });
+    }
+}
+
+function handleAddressModalClick(event) {
+    if (event.target.closest("[data-close-address-modal]")) {
+        closeAddressModal();
+    }
+}
+
+function handleAddressModalKeydown(event) {
+    if (event.key !== "Escape") return;
+    if (!document.querySelector("#address-modal")?.hidden) {
+        closeAddressModal();
+    } else if (!document.querySelector("#voucher-modal")?.hidden) {
+        closeVoucherModal();
+    }
+}
+
+function closeAddressModal() {
+    const modal = document.querySelector("#address-modal");
+    if (!modal) return;
+    modal.hidden = true;
+    document.querySelector("#btn-change-address")?.setAttribute("aria-expanded", "false");
+    document.body.classList.remove("modal-open");
+    document.querySelector("#btn-change-address")?.focus();
+}
+
+function rememberAddressManagementReturn() {
+    try {
+        sessionStorage.setItem(ADDRESS_RETURN_STORAGE_KEY, "true");
+    } catch (error) {
+        console.error("Không thể lưu trạng thái quay lại checkout:", error);
+    }
+    closeAddressModal();
+}
+
+function handleCheckoutPageShow() {
+    try {
+        if (sessionStorage.getItem(ADDRESS_RETURN_STORAGE_KEY) !== "true") return;
+        sessionStorage.removeItem(ADDRESS_RETURN_STORAGE_KEY);
+    } catch (error) {
+        console.error("Không thể kiểm tra trạng thái quay lại checkout:", error);
+    }
+    loadCheckoutAddress();
+    if (!document.querySelector("#address-modal")?.hidden) {
+        loadAddressOptions();
+    }
+}
+
 async function applyVoucher() {
     const input = document.querySelector("#coupon-code");
     const typeSelect = document.querySelector("#voucher-type");
@@ -293,45 +796,325 @@ async function applyVoucher() {
 
     if (!state.product || !state.productId || !state.quantity) {
         showMessage("Chưa thể kiểm tra voucher vì dữ liệu Buy Now chưa tải xong.", "error");
-        return;
+        return false;
     }
 
     if (!code) {
         showMessage("Vui lòng nhập mã voucher.", "error");
-        return;
+        return false;
     }
     if (!["platformCode", "sellerCode", "shippingCode"].includes(field)) {
         showMessage("Vui lòng chọn đúng loại voucher.", "error");
-        return;
+        return false;
     }
 
     const candidateCodes = { ...state.voucherCodes, [field]: code };
+    const modalApplyButton = document.querySelector("#btn-apply-manual-modal-voucher");
+    const isVoucherModalOpen = !document.querySelector("#voucher-modal")?.hidden;
+    if (isVoucherModalOpen) {
+        setVoucherModalMessage("Đang kiểm tra voucher với Backend...", "loading");
+    }
     if (applyButton) {
         applyButton.disabled = true;
         applyButton.textContent = "Đang kiểm tra...";
     }
+    if (modalApplyButton) modalApplyButton.disabled = true;
 
     try {
         const quoteUpdated = await refreshQuote(candidateCodes, false);
-        if (!quoteUpdated) return;
+        if (!quoteUpdated) return false;
         state.voucherCodes = candidateCodes;
         renderAppliedVouchers();
         input.value = "";
         const saved = saveVoucherCodes(candidateCodes);
+        if (isVoucherModalOpen) {
+            setVoucherModalMessage("Voucher đã được Backend xác nhận và áp dụng.", "success");
+        }
         showMessage(
             saved
                 ? "Voucher đã được Backend xác nhận và áp dụng."
                 : "Voucher đã được Backend xác nhận cho đơn hiện tại, nhưng không thể lưu lựa chọn trong trình duyệt.",
             saved ? "success" : "error"
         );
+        return true;
     } catch (error) {
-        showMessage(error.message || "Backend không chấp nhận voucher này.", "error");
+        const message = error.message || "Backend không chấp nhận voucher này.";
+        if (isVoucherModalOpen) setVoucherModalMessage(message, "error");
+        else showMessage(message, "error");
+        return false;
     } finally {
         if (applyButton) {
             applyButton.textContent = "Áp dụng";
         }
+        if (modalApplyButton) modalApplyButton.disabled = false;
         updateCheckoutButton();
     }
+}
+
+function setVoucherModalMessage(message, type = "") {
+    const region = document.querySelector("#voucher-modal-message");
+    if (!region) return;
+    region.textContent = message;
+    region.className = `voucher-modal-message${type ? ` ${type}` : ""}`;
+}
+
+async function openVoucherModal() {
+    if (state.submitting || state.submissionSucceeded || state.submissionFingerprint) return;
+    if (!state.product || !state.productId || !state.quantity) {
+        showMessage("Vui lòng đợi tải sản phẩm trước khi chọn voucher.", "error");
+        return;
+    }
+
+    const modal = document.querySelector("#voucher-modal");
+    const manualCode = document.querySelector("#voucher-modal-code");
+    if (!modal) return;
+
+    modal.hidden = false;
+    document.querySelector("#coupon-code")?.setAttribute("aria-expanded", "true");
+    document.body.classList.add("modal-open");
+    if (manualCode) {
+        manualCode.value = document.querySelector("#coupon-code")?.value || "";
+        document.querySelector("#voucher-modal-type").value =
+            document.querySelector("#voucher-type")?.value || "platformCode";
+        manualCode.focus();
+    }
+    await loadAvailableVouchers();
+}
+
+async function loadAvailableVouchers() {
+    const requestId = ++state.voucherListRequestId;
+    state.voucherListStatus = "loading";
+    state.voucherListError = "";
+    renderAvailableVouchers();
+
+    try {
+        const response = await withTimeout(
+            apiRequest("/api/vouchers/available", {
+                method: "POST",
+                body: {
+                    productId: state.productId,
+                    quantity: state.quantity,
+                    shippingMethod: (
+                        document.querySelector('input[name="shipping_method"]:checked')?.value || "standard"
+                    ).toUpperCase()
+                }
+            }),
+            "Hết thời gian chờ tải danh sách voucher."
+        );
+        if (requestId !== state.voucherListRequestId) return;
+        if (!Array.isArray(response.data)) {
+            throw new Error("Dữ liệu danh sách voucher từ máy chủ không hợp lệ.");
+        }
+
+        state.availableVouchers = response.data.filter(isAvailableVoucher);
+        state.voucherListStatus = "success";
+    } catch (error) {
+        if (requestId !== state.voucherListRequestId) return;
+        state.availableVouchers = [];
+        state.voucherListStatus = "error";
+        state.voucherListError = error.status === 401 || error.status === 403
+            ? "Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại."
+            : error.message || "Không thể tải voucher phù hợp.";
+    }
+    renderAvailableVouchers();
+}
+
+function isAvailableVoucher(voucher) {
+    return Boolean(
+        voucher
+        && typeof voucher.code === "string"
+        && voucher.code.trim()
+        && ["PLATFORM", "SELLER", "SHIPPING"].includes(voucher.voucherType)
+        && ["FIXED", "PERCENTAGE"].includes(voucher.discountType)
+        && voucher.discountValue !== null
+        && voucher.discountValue !== ""
+        && Number.isFinite(Number(voucher.discountValue))
+    );
+}
+
+function renderAvailableVouchers() {
+    const message = document.querySelector("#voucher-modal-message");
+    const list = document.querySelector("#voucher-modal-list");
+    const empty = document.querySelector("#voucher-modal-empty");
+    const retry = document.querySelector("#btn-retry-vouchers");
+    if (!message || !list || !empty) return;
+
+    list.replaceChildren();
+    empty.hidden = true;
+    if (state.voucherListStatus === "loading") {
+        message.textContent = "Đang tìm voucher có thể áp dụng cho đơn hàng...";
+        message.className = "voucher-modal-message loading";
+    } else if (state.voucherListStatus === "error") {
+        message.textContent = state.voucherListError;
+        message.className = "voucher-modal-message error";
+    } else if (state.voucherListStatus === "success") {
+        message.textContent = "Danh sách đã được Backend kiểm tra theo điều kiện đơn hàng hiện tại.";
+        message.className = "voucher-modal-message";
+        const vouchers = state.voucherFilter === "ALL"
+            ? state.availableVouchers
+            : state.availableVouchers.filter((voucher) => voucher.voucherType === state.voucherFilter);
+
+        if (!vouchers.length) {
+            empty.textContent = state.availableVouchers.length
+                ? "Không có voucher phù hợp với loại đang chọn."
+                : "Chưa có voucher phù hợp cho đơn hàng này.";
+            empty.hidden = false;
+        } else {
+            vouchers.forEach((voucher) => list.append(createAvailableVoucherCard(voucher)));
+        }
+    } else {
+        message.textContent = "";
+        message.className = "voucher-modal-message";
+    }
+
+    if (retry) retry.hidden = state.voucherListStatus !== "error";
+    document.querySelectorAll("[data-voucher-filter]").forEach((button) => {
+        button.setAttribute(
+            "aria-pressed",
+            String(button.dataset.voucherFilter === state.voucherFilter)
+        );
+    });
+}
+
+function createAvailableVoucherCard(voucher) {
+    const field = voucherFieldForType(voucher.voucherType);
+    const applied = state.voucherCodes[field]?.toUpperCase() === voucher.code.toUpperCase();
+    const card = document.createElement("article");
+    card.className = "voucher-option";
+    if (applied) card.classList.add("applied");
+
+    const heading = document.createElement("div");
+    heading.className = "voucher-option-heading";
+    const name = document.createElement("strong");
+    name.textContent = voucher.name || voucher.code;
+    const type = document.createElement("span");
+    type.className = "voucher-option-type";
+    type.textContent = voucher.voucherType;
+    heading.append(name, type);
+
+    const code = document.createElement("p");
+    code.className = "voucher-option-code";
+    code.textContent = voucher.code;
+
+    const description = document.createElement("p");
+    description.className = "voucher-option-description";
+    description.textContent = voucher.description || "Ưu đãi do Backend cung cấp.";
+
+    const facts = document.createElement("dl");
+    facts.className = "voucher-option-facts";
+    appendVoucherFact(facts, "Mức giảm", formatVoucherDiscount(voucher));
+    appendVoucherFact(
+        facts,
+        "Đơn tối thiểu",
+        Number(voucher.minOrderAmount) > 0
+            ? formatVnd(voucher.minOrderAmount)
+            : "Không yêu cầu"
+    );
+    if (voucher.maxDiscountAmount != null) {
+        appendVoucherFact(facts, "Giảm tối đa", formatVnd(voucher.maxDiscountAmount));
+    }
+    appendVoucherFact(facts, "Hạn sử dụng", formatVoucherDate(voucher.endAt));
+
+    const apply = document.createElement("button");
+    apply.type = "button";
+    apply.className = "voucher-option-apply";
+    apply.dataset.voucherCode = voucher.code;
+    apply.dataset.voucherType = field;
+    apply.textContent = applied ? "Đang áp dụng" : "Áp dụng";
+    apply.disabled = applied;
+
+    card.append(heading, code, description, facts, apply);
+    return card;
+}
+
+function appendVoucherFact(list, label, value) {
+    const row = document.createElement("div");
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const description = document.createElement("dd");
+    description.textContent = value;
+    row.append(term, description);
+    list.append(row);
+}
+
+function formatVoucherDiscount(voucher) {
+    if (voucher.discountType === "PERCENTAGE") {
+        return `${Number(voucher.discountValue).toLocaleString("vi-VN")}%`;
+    }
+    return formatVnd(voucher.discountValue);
+}
+
+function formatVoucherDate(value) {
+    if (!value) return "Không có thông tin";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "Không có thông tin" : date.toLocaleString("vi-VN");
+}
+
+function voucherFieldForType(type) {
+    return {
+        PLATFORM: "platformCode",
+        SELLER: "sellerCode",
+        SHIPPING: "shippingCode"
+    }[type] || "";
+}
+
+function handleVoucherModalClick(event) {
+    const closeButton = event.target.closest("[data-close-voucher-modal]");
+    if (closeButton) {
+        closeVoucherModal();
+        return;
+    }
+
+    const filterButton = event.target.closest("[data-voucher-filter]");
+    if (filterButton) {
+        state.voucherFilter = filterButton.dataset.voucherFilter || "ALL";
+        renderAvailableVouchers();
+    }
+}
+
+async function handleAvailableVoucherClick(event) {
+    const button = event.target.closest("[data-voucher-code]");
+    if (!button || button.disabled) return;
+    button.disabled = true;
+    const input = document.querySelector("#coupon-code");
+    const typeSelect = document.querySelector("#voucher-type");
+    if (input) input.value = button.dataset.voucherCode;
+    if (typeSelect) typeSelect.value = button.dataset.voucherType;
+
+    if (await applyVoucher()) {
+        closeVoucherModal();
+    } else {
+        button.disabled = false;
+    }
+}
+
+async function applyManualVoucherFromModal() {
+    const code = document.querySelector("#voucher-modal-code")?.value.trim();
+    const field = document.querySelector("#voucher-modal-type")?.value;
+    const input = document.querySelector("#coupon-code");
+    const typeSelect = document.querySelector("#voucher-type");
+    if (input) input.value = code || "";
+    if (typeSelect) typeSelect.value = field || "platformCode";
+
+    const applyButton = document.querySelector("#btn-apply-manual-modal-voucher");
+    if (applyButton) applyButton.disabled = true;
+    try {
+        if (await applyVoucher()) {
+            document.querySelector("#voucher-modal-code").value = "";
+            closeVoucherModal();
+        }
+    } finally {
+        if (applyButton) applyButton.disabled = false;
+    }
+}
+
+function closeVoucherModal() {
+    const modal = document.querySelector("#voucher-modal");
+    if (!modal) return;
+    modal.hidden = true;
+    document.querySelector("#coupon-code")?.setAttribute("aria-expanded", "false");
+    document.body.classList.remove("modal-open");
+    document.querySelector("#coupon-code")?.focus();
 }
 
 async function refreshQuote(
@@ -344,6 +1127,7 @@ async function refreshQuote(
     const payload = createQuotePayload(voucherCodes, shippingMethod, quantity);
 
     state.quotePending = true;
+    state.quoteError = "";
     if (clearPreviousQuote) {
         state.quote = null;
         state.quotePayloadFingerprint = null;
@@ -352,10 +1136,13 @@ async function refreshQuote(
     updateCheckoutButton();
 
     try {
-        const response = await apiRequest("/api/vouchers/validate", {
-            method: "POST",
-            body: payload
-        });
+        const response = await withTimeout(
+            apiRequest("/api/vouchers/validate", {
+                method: "POST",
+                body: payload
+            }),
+            "Hết thời gian chờ lấy báo giá."
+        );
         if (requestId !== state.quoteRequestId) return false;
         if (!isValidQuote(response.data)) {
             throw new Error("Dữ liệu báo giá từ máy chủ không hợp lệ.");
@@ -364,12 +1151,45 @@ async function refreshQuote(
         state.quotePayloadFingerprint = JSON.stringify(payload);
         renderQuote();
         return true;
+    } catch (error) {
+        if (requestId === state.quoteRequestId) {
+            state.quoteError = error.message || "Không thể tải báo giá.";
+            renderQuote();
+        }
+        throw error;
     } finally {
         if (requestId === state.quoteRequestId) {
             state.quotePending = false;
+            renderQuote();
             updateCheckoutButton();
         }
     }
+}
+
+async function handleQuoteChangeFailure(error, context) {
+    const hasAppliedVouchers = Object.values(state.voucherCodes).some(Boolean);
+    if (error.status === 400 && hasAppliedVouchers) {
+        const noVouchers = emptyVoucherCodes();
+        try {
+            await refreshQuote(noVouchers, true);
+            state.voucherCodes = noVouchers;
+            saveVoucherCodes(noVouchers);
+            renderAppliedVouchers();
+            showMessage(
+                "Điều kiện đơn hàng đã thay đổi; voucher cũ không còn hợp lệ. Hãy chọn lại voucher phù hợp.",
+                "error"
+            );
+            return;
+        } catch (quoteError) {
+            showMessage(
+                `${context} ${quoteError.message || "Vui lòng thử lại."}`,
+                "error"
+            );
+            return;
+        }
+    }
+
+    showMessage(`${context} ${error.message || "Vui lòng thử lại."}`, "error");
 }
 
 function isValidQuote(quote) {
@@ -390,9 +1210,25 @@ function renderQuote() {
     if (!summary) return;
 
     if (!state.quote) {
-        summary.innerHTML = `<p role="status">Đang chờ báo giá từ máy chủ...</p>`;
+        summary.replaceChildren();
+        const message = document.createElement("p");
+        message.setAttribute("role", "status");
+        message.textContent = state.quotePending
+            ? "Đang lấy báo giá từ máy chủ..."
+            : state.quoteError || "Chưa có báo giá hợp lệ.";
+        summary.append(message);
+        if (!state.quotePending) {
+            const retry = document.createElement("button");
+            retry.type = "button";
+            retry.id = "btn-retry-quote";
+            retry.className = "btn-text-action";
+            retry.textContent = "Thử tải lại báo giá";
+            summary.append(retry);
+        }
         const subtotal = document.querySelector(".package-subtotal");
-        if (subtotal) subtotal.textContent = "Đang tính...";
+        if (subtotal) subtotal.textContent = state.quotePending ? "Đang tính..." : "—";
+        const amount = document.querySelector(".highlight-amount");
+        if (amount) amount.textContent = "—";
         renderAppliedVouchers();
         return;
     }
@@ -596,22 +1432,49 @@ async function submitCheckout(event) {
             method: "POST",
             body: payload
         });
-        const orderCode = response.data?.orderCode;
+
+        const order = response.data;
+
+        if (
+            !order?.orderCode
+            || !order?.paymentCode
+            || !Number.isFinite(Number(order.totalAmount))
+        ) {
+            throw new Error(
+                "Backend chưa trả về đầy đủ mã đơn hàng, mã thanh toán hoặc số tiền."
+            );
+        }
+
+        // Lưu thông tin đơn hàng và giao dịch đang chờ thanh toán.
+        const pendingPayment = {
+            orderCode: order.orderCode,
+            paymentCode: order.paymentCode,
+            paymentId: order.paymentId ?? null,
+            amount: Number(order.totalAmount),
+            status: "PENDING",
+            paidAt: null,
+            checkoutSessionId: state.checkoutSessionId
+        };
+
+        // Phải lưu thành công trước khi khóa checkout.
+        if (!savePendingPayment(pendingPayment)) {
+            throw new Error(
+                "Đơn hàng có thể đã được tạo nhưng không thể lưu thông tin thanh toán. "
+                + "Vui lòng không tạo checkout mới; hãy kiểm tra đơn hàng trước."
+            );
+        }
+
         state.submissionSucceeded = true;
+
+        // Hiển thị giao diện thanh toán.
+        renderMockPaymentPanel(pendingPayment);
+
         showMessage(
-            `Đã tạo đơn hàng${orderCode ? ` ${orderCode}` : ""}. Đơn đang chờ thanh toán; giao dịch thanh toán chưa được xác nhận.`,
+            `Đã tạo đơn hàng ${order.orderCode}. Vui lòng hoàn tất thanh toán.`,
             "success"
         );
-        sessionStorage.removeItem("buyNowItem");
-        state.buyNowItem = null;
-        try {
-            sessionStorage.removeItem(VOUCHER_STORAGE_KEY);
-        } catch {
-            showMessage("Đơn đã được tạo thành công. Không thể xóa mã voucher tạm đã lưu trên trình duyệt.", "error");
-        }
-        window.setTimeout(() => {
-            window.location.href = "../../thuc/html/page3.html";
-        }, 1800);
+
+        updateCheckoutButton();
     } catch (error) {
         showMessage(checkoutErrorMessage(error), "error");
     } finally {
@@ -650,6 +1513,28 @@ function ensureIdempotencyKey(buyNowItem) {
         throw new Error("Không thể lưu khóa checkout. Yêu cầu đặt hàng chưa được gửi.");
     }
     return key;
+}
+
+function createCheckoutSessionId() {
+    if (!window.crypto?.getRandomValues) {
+        throw new Error("Trình duyệt không hỗ trợ tạo mã phiên checkout an toàn.");
+    }
+    if (window.crypto.randomUUID) return window.crypto.randomUUID();
+
+    const bytes = new Uint8Array(16);
+    window.crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function withTimeout(request, message, timeoutMs = 15000) {
+    let timeoutId;
+    const timeout = new Promise((_, reject) => {
+        timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    });
+    return Promise.race([request, timeout]).finally(() => window.clearTimeout(timeoutId));
 }
 
 function readCheckoutRequestSnapshot(buyNowItem) {
@@ -720,6 +1605,34 @@ function saveBuyNowItem() {
     }
 }
 
+function readPendingPayment() {
+    try {
+        const rawData = sessionStorage.getItem(PENDING_PAYMENT_STORAGE_KEY);
+
+        if (!rawData) return null;
+
+        const payment = JSON.parse(rawData);
+
+        if (
+            !payment
+            || typeof payment.orderCode !== "string"
+            || !payment.orderCode.trim()
+            || typeof payment.paymentCode !== "string"
+            || !payment.paymentCode.trim()
+            || !Number.isFinite(Number(payment.amount))
+            || Number(payment.amount) < 0
+        ) {
+            sessionStorage.removeItem(PENDING_PAYMENT_STORAGE_KEY);
+            return null;
+        }
+
+        return payment;
+    } catch {
+        sessionStorage.removeItem(PENDING_PAYMENT_STORAGE_KEY);
+        return null;
+    }
+}
+
 function checkoutErrorMessage(error) {
     if (error.status === 400) {
         return `Backend từ chối dữ liệu đặt hàng: ${error.message || "Vui lòng kiểm tra thông tin checkout."}`;
@@ -769,10 +1682,18 @@ function saveVoucherCodes(codes) {
 
 function updateCheckoutButton() {
     const button = document.querySelector(".btn-submit-checkout");
+    const changeAddressButton = document.querySelector("#btn-change-address");
     const blockedReason = checkoutBlockedReason();
+    const checkoutLocked = state.submitting || state.submissionSucceeded || Boolean(state.submissionFingerprint);
     if (button) {
         button.disabled = Boolean(blockedReason);
         button.setAttribute("aria-describedby", "checkout-submit-status");
+    }
+    if (changeAddressButton) {
+        changeAddressButton.disabled = checkoutLocked;
+        changeAddressButton.setAttribute("aria-expanded", String(
+            !document.querySelector("#address-modal")?.hidden
+        ));
     }
 
     const status = document.querySelector("#checkout-submit-status");
@@ -783,9 +1704,10 @@ function updateCheckoutButton() {
     }
 
     const applyButton = document.querySelector(".btn-apply-voucher");
+    const voucherInput = document.querySelector("#coupon-code");
+    if (voucherInput) voucherInput.disabled = checkoutLocked;
     if (applyButton) {
-        applyButton.disabled = state.submitting || state.submissionSucceeded || Boolean(state.submissionFingerprint)
-            || state.quotePending || !state.product;
+        applyButton.disabled = checkoutLocked || state.quotePending || !state.product;
     }
     const lockCheckoutOptions = state.submitting || state.quotePending
         || state.submissionSucceeded || Boolean(state.submissionFingerprint);
@@ -809,11 +1731,21 @@ function checkoutBlockedReason() {
     if (state.submissionSucceeded) return "Đơn hàng đã được tạo.";
     if (state.quotePending) return "Đang xác nhận báo giá, vui lòng đợi.";
     if (!state.product || !state.idempotencyKey) return "Đang tải thông tin sản phẩm...";
+    if (state.addressStatus === "loading") return "Đang tải địa chỉ nhận hàng...";
+    if (state.addressStatus === "error") return "Không thể tải địa chỉ nhận hàng. Hãy thử tải lại trước khi đặt hàng.";
     if (!isAddressUsable(state.address)) {
         return "Vui lòng thêm địa chỉ nhận hàng gồm tên người nhận, số điện thoại và địa chỉ đầy đủ.";
     }
-    if (!state.quote && !state.checkoutRequestSnapshot) {
-        return "Chưa có báo giá hợp lệ. Vui lòng chờ tải báo giá hoặc thử tải lại trang.";
+    const currentQuoteFingerprint = JSON.stringify(createQuotePayload(
+        state.voucherCodes,
+        document.querySelector('input[name="shipping_method"]:checked')?.value || "standard",
+        state.quantity
+    ));
+    if ((!state.quote || state.quotePayloadFingerprint !== currentQuoteFingerprint)
+        && !state.checkoutRequestSnapshot) {
+        return state.quoteError
+            ? "Không thể tải báo giá. Hãy thử tải lại trước khi đặt hàng."
+            : "Chưa có báo giá hợp lệ. Vui lòng chờ tải báo giá hoặc thử tải lại.";
     }
     if (state.submissionFingerprint && !state.checkoutRequestSnapshot) {
         return "Không thể khôi phục yêu cầu checkout trước đó. Hãy kiểm tra đơn hàng trước khi thử tạo đơn mới.";
@@ -836,6 +1768,97 @@ function addressText(address) {
         address?.district,
         address?.province
     ].filter((part) => typeof part === "string" && part.trim()).join(", ");
+}
+
+function savePendingPayment(payment) {
+    try {
+        sessionStorage.setItem(
+            PENDING_PAYMENT_STORAGE_KEY,
+            JSON.stringify(payment)
+        );
+        state.pendingPayment = payment;
+        return true;
+    } catch (error) {
+        console.error("Không thể lưu thông tin thanh toán:", error);
+        return false;
+    }
+}
+
+function renderMockPaymentPanel(payment) {
+    const panel = document.querySelector("#mock-payment-panel");
+
+    if (!panel || !payment) {
+        console.error("Không tìm thấy Mock Payment panel hoặc dữ liệu thanh toán.");
+        return;
+    }
+
+    const orderCode = document.querySelector("#mock-order-code");
+    const paymentCode = document.querySelector("#mock-payment-code");
+    const amount = document.querySelector("#mock-payment-amount");
+    const status = document.querySelector("#mock-payment-status");
+    const message = document.querySelector("#mock-payment-message");
+
+    if (orderCode) {
+        orderCode.textContent = payment.orderCode || "—";
+    }
+
+    if (paymentCode) {
+        paymentCode.textContent = payment.paymentCode || "—";
+    }
+
+    if (amount) {
+        amount.textContent = formatVnd(payment.amount);
+    }
+
+    if (status) {
+        status.textContent = payment.status === "SUCCEEDED"
+            ? "Thanh toán thành công"
+            : payment.status === "FAILED"
+                ? "Thanh toán thất bại"
+                : "Đang chờ thanh toán";
+
+        status.dataset.status = payment.status || "PENDING";
+    }
+
+    if (message) {
+        message.textContent = payment.status === "FAILED"
+            ? "Giao dịch thất bại. Bạn có thể thử thanh toán lại."
+            : payment.status === "SUCCEEDED"
+                ? "Giao dịch đã được xác nhận thành công."
+                : "Vui lòng chọn kết quả thanh toán để tiếp tục.";
+
+        message.className = `checkout-message ${
+            payment.status === "FAILED"
+                ? "error"
+                : payment.status === "SUCCEEDED"
+                    ? "success"
+                    : ""
+        }`;
+
+        message.hidden = false;
+    }
+
+    const successButton = document.querySelector("#btn-mock-success");
+    const failedButton = document.querySelector("#btn-mock-failed");
+    const retryButton = document.querySelector("#btn-mock-retry");
+
+    if (successButton) {
+        successButton.hidden = payment.status !== "PENDING";
+    }
+
+    if (failedButton) {
+        failedButton.hidden = payment.status !== "PENDING";
+    }
+
+    if (retryButton) {
+        retryButton.hidden = payment.status !== "FAILED";
+    }
+
+    panel.hidden = false;
+    panel.scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+    });
 }
 
 function showMessage(message, type) {
