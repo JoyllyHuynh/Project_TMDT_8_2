@@ -14,6 +14,8 @@ public interface VoucherRepository extends JpaRepository<Voucher, Long> {
 
     List<Voucher> findAllByOrderByCreatedAtDesc();
 
+    List<Voucher> findAllByActiveTrueOrderByEndAtAsc();
+
     List<Voucher> findAllBySeller_IdOrderByCreatedAtDesc(Long sellerId);
 
     Optional<Voucher> findByCodeIgnoreCase(String code);

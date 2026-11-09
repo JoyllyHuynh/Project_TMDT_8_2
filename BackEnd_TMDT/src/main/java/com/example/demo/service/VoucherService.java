@@ -3,6 +3,8 @@ package com.example.demo.service;
 
 import com.example.demo.dto.voucher.VoucherValidateRequest;
 import com.example.demo.dto.voucher.VoucherValidateResponse;
+import com.example.demo.dto.voucher.VoucherAvailableRequest;
+import com.example.demo.dto.voucher.VoucherAvailableResponse;
 import com.example.demo.exception.ApiException;
 import com.example.demo.model.Product;
 import com.example.demo.model.Voucher;
@@ -40,6 +42,37 @@ public class VoucherService {
     private final ProductRepository productRepository;
     private final ShippingFeeService shippingFeeService;
     private final OrderRepository orderRepository;
+
+    @Transactional(readOnly = true)
+    public List<VoucherAvailableResponse> getAvailableVouchers(
+            VoucherAvailableRequest request
+    ) {
+        Long userId = SecurityUtils.currentUserId();
+        Product product = productRepository
+                .findByIdAndDeletedAtIsNull(request.getProductId())
+                .orElseThrow(() -> ApiException.notFound("Không tìm thấy sản phẩm."));
+
+        if (!Boolean.TRUE.equals(product.getActive())) {
+            throw ApiException.badRequest("Sản phẩm hiện không còn được kinh doanh.");
+        }
+        if (product.getPrice() == null || product.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
+            throw ApiException.badRequest("Giá sản phẩm không hợp lệ.");
+        }
+        if (request.getQuantity() == null || request.getQuantity() < 1) {
+            throw ApiException.badRequest("Số lượng sản phẩm không hợp lệ.");
+        }
+        if (request.getQuantity() > product.getStockQuantity()) {
+            throw ApiException.badRequest("Số lượng sản phẩm vượt quá tồn kho.");
+        }
+
+        BigDecimal subtotal = money(product.getPrice()
+                .multiply(BigDecimal.valueOf(request.getQuantity())));
+
+        return voucherRepository.findAllByActiveTrueOrderByEndAtAsc().stream()
+                .filter(voucher -> isEligibleForCheckout(voucher, product, subtotal, userId))
+                .map(this::toAvailableResponse)
+                .toList();
+    }
 
     @Transactional(readOnly = true)
     public VoucherValidateResponse validateVouchers(VoucherValidateRequest request) {
@@ -144,6 +177,44 @@ public class VoucherService {
         response.setTotalAmount(totalAmount);
 
         return response;
+    }
+
+    private boolean isEligibleForCheckout(
+            Voucher voucher,
+            Product product,
+            BigDecimal subtotal,
+            Long userId
+    ) {
+        try {
+            validateVoucher(
+                    voucher,
+                    voucher.getCode(),
+                    voucher.getVoucherType(),
+                    product,
+                    subtotal,
+                    userId,
+                    false
+            );
+            return true;
+        } catch (ApiException exception) {
+            return false;
+        }
+    }
+
+    private VoucherAvailableResponse toAvailableResponse(Voucher voucher) {
+        return VoucherAvailableResponse.builder()
+                .id(voucher.getId())
+                .code(voucher.getCode())
+                .name(voucher.getName())
+                .description(voucher.getDescription())
+                .voucherType(voucher.getVoucherType())
+                .discountType(voucher.getDiscountType())
+                .discountValue(voucher.getDiscountValue())
+                .minOrderAmount(voucher.getMinOrderAmount())
+                .maxDiscountAmount(voucher.getMaxDiscountAmount())
+                .startAt(voucher.getStartAt())
+                .endAt(voucher.getEndAt())
+                .build();
     }
 
     private Voucher validateVoucher(

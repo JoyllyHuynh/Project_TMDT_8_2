@@ -7,3 +7,4 @@ public enum GatewayPaymentStatus {
     EXPIRED,
     CANCELLED
 }
+    

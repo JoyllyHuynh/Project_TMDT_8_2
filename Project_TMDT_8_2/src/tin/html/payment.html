@@ -207,7 +207,7 @@
                             <i class="fa-solid fa-location-dot"></i>
                             <h2>Địa Chỉ Nhận Hàng Sưu Tầm</h2>
                         </div>
-                        <a href="../../vu/manage_address/manage_address.html" class="btn-text-action">Thay đổi địa chỉ</a>
+                        <button type="button" class="btn-text-action" id="btn-change-address">Thay đổi địa chỉ</button>
                     </div>
                     <div class="address-details">
                         <div class="recipient-row">
@@ -219,6 +219,10 @@
                         <p class="recipient-address">
                             Đang tải địa chỉ nhận hàng...
                         </p>
+                        <p id="address-load-message" class="checkout-message" role="status" hidden></p>
+                        <button type="button" id="btn-retry-address" class="btn-text-action" hidden>
+                            Thử tải lại địa chỉ
+                        </button>
                         <div class="collector-delivery-note">
                             <i class="fa-solid fa-triangle-exclamation"></i>
                             <span>Vui lòng kiểm tra chính xác thông tin người nhận trước khi đặt hàng.</span>
@@ -271,93 +275,144 @@
                     </div>
                 </section>
 
-                <!-- 3. PHƯƠNG THỨC THANH TOÁN (CHỈ GỒM: CHUYỂN KHOẢN QR & COD) -->
+                <!-- 3. PHƯƠNG THỨC THANH TOÁN -->
                 <section class="checkout-section-card payment-methods-card">
                     <div class="card-header-bar">
                         <div class="card-header-title">
                             <i class="fa-solid fa-wallet"></i>
                             <div>
-                                <h2>Phương Thức Thanh Toán Bảo Đảm</h2>
-                                <p class="section-subtext">ComicHub giữ tiền ký quỹ trong 48 giờ để bạn an tâm mở hộp kiểm tra</p>
+                                <h2>Phương Thức Thanh Toán</h2>
+                                <p class="section-subtext">
+                                    Thanh toán mô phỏng để kiểm thử quy trình đặt hàng.
+                                </p>
                             </div>
                         </div>
-                        <span class="escrow-safe-badge"><i class="fa-solid fa-shield-check"></i> Escrow Vault 100%</span>
+
+                        <span class="escrow-safe-badge">
+                            <i class="fa-solid fa-shield-check"></i>
+                            Mock Payment
+                        </span>
                     </div>
+
                     <div class="payment-selection-list">
-                        <!-- Lựa chọn 1: Chuyển khoản QR (Khuyên dùng) -->
                         <div class="payment-method-item selected">
                             <label class="payment-label">
-                                <input type="radio" name="payment_method" value="vnpay" class="payment-radio" checked>
+                                <input
+                                    type="radio"
+                                    name="payment_method"
+                                    value="vnpay"
+                                    class="payment-radio"
+                                    checked
+                                >
+
                                 <div class="payment-header-row">
-            <span class="payment-title">
-                Thanh Toán Bằng VNPAY-QR
-            </span>
-            <span class="badge-recommend">Khuyên dùng</span>
-                 </div>
-                                <span class="payment-subtitle">Đơn hàng được tạo qua Backend. API hiện chưa cung cấp mã QR hoặc thông tin giao dịch VNPAY.</span>
+                                    <span class="payment-title">
+                                        Thanh Toán Mô Phỏng
+                                    </span>
+
+                                    <span class="badge-recommend">
+                                        Đang khả dụng
+                                    </span>
+                                </div>
+
+                                <span class="payment-subtitle">
+                                    Giao dịch thử nghiệm. Không phát sinh thanh toán tiền thật.
+                                </span>
                             </label>
-                            <!-- Box hiển thị thông tin VNPAY-QR -->
+
                             <div class="qr-payment-details-box">
                                 <div class="qr-code-wrapper">
                                     <span class="qr-scan-instruction">
                                         <i class="fa-solid fa-circle-info"></i>
-                                        Hướng dẫn thanh toán sẽ hiển thị khi Backend có API giao dịch.
+                                        Sau khi xác nhận đặt hàng, hệ thống sẽ
+                                        chuyển sang bước mô phỏng thanh toán.
                                     </span>
                                 </div>
+
                                 <div class="bank-transfer-info-table">
-
                                     <div class="info-row">
-                <span class="info-label">
-                    Đơn vị thanh toán:
-                </span>
-
-                                        <strong class="info-value">
-                                            VNPAY
-                                        </strong>
+                                        <span class="info-label">Đơn vị thanh toán:</span>
+                                        <strong class="info-value">ComicHub Mock Gateway</strong>
                                     </div>
 
                                     <div class="info-row">
-                <span class="info-label">
-                    Đơn vị chấp nhận thanh toán:
-                </span>
-
-                                        <strong class="info-value">
-                                            COMICHUB
-                                        </strong>
-                                    </div>
-
-                                    <div class="info-row">
-                <span class="info-label">
-                    Số tiền:
-                </span>
-
-                                        <strong class="info-value highlight-amount">
-                                            —
-                                        </strong>
+                                        <span class="info-label">Số tiền:</span>
+                                        <strong class="info-value highlight-amount">—</strong>
                                     </div>
 
                                     <p class="qr-security-note">
                                         <i class="fa-solid fa-shield-halved"></i>
-                                        Việc tạo đơn hàng chưa đồng nghĩa với việc thanh toán đã hoàn tất.
+                                        Đơn hàng chỉ được xác nhận thanh toán khi
+                                        Backend trả về trạng thái SUCCEEDED.
                                     </p>
-
                                 </div>
-
                             </div>
-
-                        </div>
-
-                        <!-- Lựa chọn 2: COD Đồng kiểm -->
-                        <div class="payment-method-item">
-                            <label class="payment-label">
-                                <input type="radio" name="payment_method" value="momo" class="payment-radio" disabled>
-                                <div class="payment-header-row">
-                                    <span class="payment-title">Thanh Toán MoMo (Chưa khả dụng)</span>
-                                </div>
-                                <span class="payment-subtitle">Phương thức này chưa được bật trong cấu hình thanh toán hiện tại.</span>
-                            </label>
                         </div>
                     </div>
+                </section>
+                <!-- 3.1. KẾT QUẢ MOCK PAYMENT -->
+                <section
+                    id="mock-payment-panel"
+                    class="checkout-section-card mock-payment-panel"
+                    hidden
+                    aria-live="polite"
+                >
+                    <div class="card-header-bar">
+                        <div class="card-header-title">
+                            <i class="fa-solid fa-receipt"></i>
+                            <div>
+                                <h2>Thanh Toán Đơn Hàng</h2>
+                                <p class="section-subtext">
+                                    Giao dịch mô phỏng ComicHub
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mock-payment-info">
+                        <div class="info-row">
+                            <span>Mã đơn hàng:</span>
+                            <strong id="mock-order-code">—</strong>
+                        </div>
+
+                        <div class="info-row">
+                            <span>Mã giao dịch:</span>
+                            <strong id="mock-payment-code">—</strong>
+                        </div>
+
+                        <div class="info-row">
+                            <span>Số tiền:</span>
+                            <strong id="mock-payment-amount">—</strong>
+                        </div>
+
+                        <div class="info-row">
+                            <span>Trạng thái:</span>
+                            <strong id="mock-payment-status">Đang chờ thanh toán</strong>
+                        </div>
+                    </div>
+
+                    <div id="mock-payment-message" class="checkout-message" role="status" hidden></div>
+
+                    <div id="mock-payment-actions" class="mock-payment-actions">
+                        <button type="button" id="btn-mock-success">
+                            <i class="fa-solid fa-check"></i>
+                            Thanh toán thành công
+                        </button>
+
+                        <button type="button" id="btn-mock-failed">
+                            <i class="fa-solid fa-xmark"></i>
+                            Thanh toán thất bại
+                        </button>
+                    </div>
+
+                    <button
+                        type="button"
+                        id="btn-mock-retry"
+                        hidden
+                    >
+                        <i class="fa-solid fa-rotate-right"></i>
+                        Thử thanh toán lại
+                    </button>
                 </section>
 
                 <!-- 4. KIỆN HÀNG THANH TOÁN (CHI TIẾT MUA THẲNG & KÈO BARTER) -->
@@ -497,7 +552,16 @@
                         </div>
                         <div class="voucher-input-bar">
                             <i class="fa-solid fa-ticket voucher-input-icon"></i>
-                            <input type="text" id="coupon-code" name="voucher_code" class="voucher-field" placeholder="Nhập mã voucher...">
+                            <input
+                                type="text"
+                                id="coupon-code"
+                                name="voucher_code"
+                                class="voucher-field"
+                                placeholder="Chọn voucher hoặc nhập mã..."
+                                aria-haspopup="dialog"
+                                aria-controls="voucher-modal"
+                                aria-expanded="false"
+                            >
                             <button type="button" class="btn-apply-voucher" disabled>Áp dụng</button>
                         </div>
                         <label class="voucher-type-label" for="voucher-type">Loại voucher:</label>
@@ -555,6 +619,97 @@
                 </a>
             </aside>
         </form>
+
+        <div id="address-modal" class="checkout-modal" hidden>
+            <div class="checkout-modal-backdrop" data-close-address-modal></div>
+            <section
+                class="checkout-modal-panel"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="address-modal-title"
+                aria-describedby="address-modal-message"
+            >
+                <header class="checkout-modal-header">
+                    <div>
+                        <p class="checkout-modal-eyebrow">Thông tin giao nhận</p>
+                        <h2 id="address-modal-title" tabindex="-1">Chọn địa chỉ giao hàng</h2>
+                    </div>
+                    <button type="button" class="checkout-modal-close" data-close-address-modal aria-label="Đóng">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </header>
+                <p id="address-modal-message" class="address-modal-message" role="status" aria-live="polite"></p>
+                <button type="button" class="btn-text-action address-modal-retry" id="btn-retry-address-modal" hidden>
+                    Thử tải lại danh sách
+                </button>
+                <div id="address-modal-list" class="address-modal-list"></div>
+                <div id="address-modal-empty" class="address-modal-empty" hidden>
+                    <strong>Bạn chưa có địa chỉ giao hàng</strong>
+                    <p>Thêm địa chỉ để tiếp tục đặt hàng.</p>
+                    <a
+                        id="btn-add-address"
+                        class="btn-text-action"
+                        href="../../vu/manage_address/manage_address.html"
+                    >Thêm địa chỉ mới</a>
+                </div>
+                <div class="checkout-modal-actions">
+                    <button type="button" class="btn-modal-secondary" data-close-address-modal>Đóng</button>
+                    <button type="button" class="btn-modal-primary" id="btn-confirm-address" disabled>
+                        Xác nhận địa chỉ
+                    </button>
+                </div>
+            </section>
+        </div>
+
+        <div id="voucher-modal" class="checkout-modal" hidden>
+            <div class="checkout-modal-backdrop" data-close-voucher-modal></div>
+            <section
+                class="checkout-modal-panel voucher-modal-panel"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="voucher-modal-title"
+                aria-describedby="voucher-modal-message"
+            >
+                <header class="checkout-modal-header">
+                    <div>
+                        <p class="checkout-modal-eyebrow">Ưu đãi cho đơn hàng này</p>
+                        <h2 id="voucher-modal-title" tabindex="-1">Chọn voucher</h2>
+                    </div>
+                    <button type="button" class="checkout-modal-close" data-close-voucher-modal aria-label="Đóng">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </header>
+                <p id="voucher-modal-message" class="voucher-modal-message" role="status" aria-live="polite"></p>
+                <button type="button" class="btn-text-action voucher-modal-retry" id="btn-retry-vouchers" hidden>
+                    Thử tải lại voucher
+                </button>
+                <div class="voucher-modal-filters" role="group" aria-label="Lọc loại voucher">
+                    <button type="button" data-voucher-filter="ALL" aria-pressed="true">Tất cả</button>
+                    <button type="button" data-voucher-filter="PLATFORM" aria-pressed="false">Platform</button>
+                    <button type="button" data-voucher-filter="SELLER" aria-pressed="false">Seller</button>
+                    <button type="button" data-voucher-filter="SHIPPING" aria-pressed="false">Shipping</button>
+                </div>
+                <div id="voucher-modal-list" class="voucher-modal-list"></div>
+                <div id="voucher-modal-empty" class="voucher-modal-empty" hidden>
+                    Chưa có voucher phù hợp cho đơn hàng này.
+                </div>
+                <div class="voucher-modal-manual">
+                    <label for="voucher-modal-code">Hoặc nhập mã voucher thủ công</label>
+                    <div class="voucher-modal-manual-row">
+                        <input type="text" id="voucher-modal-code" placeholder="Nhập mã voucher...">
+                        <select id="voucher-modal-type" aria-label="Loại voucher">
+                            <option value="platformCode">PLATFORM</option>
+                            <option value="sellerCode">SELLER</option>
+                            <option value="shippingCode">SHIPPING</option>
+                        </select>
+                        <button type="button" id="btn-apply-manual-modal-voucher">Áp dụng</button>
+                    </div>
+                </div>
+                <div class="checkout-modal-actions">
+                    <button type="button" class="btn-modal-secondary" data-close-voucher-modal>Đóng</button>
+                </div>
+            </section>
+        </div>
 
         <!-- CAM KẾT SÀN GIAO DỊCH DƯỚI CÙNG -->
         <section class="trust-features-row">

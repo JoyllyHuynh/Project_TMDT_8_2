@@ -32,14 +32,40 @@ function handleBuyNow(productId) {
     const quantityInput = document.querySelector("#productQuantity");
     const quantity = quantityInput ? parseInt(quantityInput.value, 10) || 1 : 1;
 
-    const buyNowData = {
-        productId: productId,
-        quantity: quantity
-    };
-    sessionStorage.setItem("buyNowItem", JSON.stringify(buyNowData));
+    let checkoutSessionId;
+    try {
+        checkoutSessionId = createCheckoutSessionId();
+        const buyNowData = {
+            productId,
+            quantity,
+            checkoutSessionId
+        };
+        sessionStorage.setItem("buyNowItem", JSON.stringify(buyNowData));
+        sessionStorage.removeItem("comichub_pending_payment");
+    } catch (error) {
+        console.error("Không thể khởi tạo phiên Mua Ngay:", error);
+        alert("Không thể bắt đầu phiên mua hàng mới. Vui lòng kiểm tra bộ nhớ trình duyệt rồi thử lại.");
+        return;
+    }
 
     // Điều hướng tới payment.html cùng cấp
     window.location.href = "payment.html";
+}
+
+function createCheckoutSessionId() {
+    if (!window.crypto?.getRandomValues) {
+        throw new Error("Trình duyệt không hỗ trợ tạo mã phiên an toàn.");
+    }
+    if (window.crypto.randomUUID) {
+        return window.crypto.randomUUID();
+    }
+
+    const bytes = new Uint8Array(16);
+    window.crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 // Gắn sự kiện Mua Ngay ngay khi trang load, không phụ thuộc vào kết quả gọi API

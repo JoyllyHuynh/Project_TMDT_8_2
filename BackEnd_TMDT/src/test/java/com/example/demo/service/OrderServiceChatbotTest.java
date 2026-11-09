@@ -23,6 +23,7 @@ import com.example.demo.repository.VoucherUsageRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import com.example.demo.repository.PaymentRepository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
@@ -70,6 +71,7 @@ class OrderServiceChatbotTest {
                 mock(ProductRepository.class),
                 mock(UserRepository.class),
                 mock(ProductImageRepository.class),
+                mock(PaymentRepository.class),
                 mock(CheckoutBatchRepository.class),
                 mock(VoucherRepository.class),
                 mock(VoucherService.class),
