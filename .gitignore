@@ -1,0 +1,7 @@
+﻿# Python
+SentimentAPI/venv/
+SentimentAPI/__pycache__/
+SentimentAPI/**/*.pyc
+
+# Model files
+SentimentAPI/models/
