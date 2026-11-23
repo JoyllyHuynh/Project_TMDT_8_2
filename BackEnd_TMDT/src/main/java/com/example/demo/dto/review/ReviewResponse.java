@@ -7,6 +7,7 @@ import lombok.Getter;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.math.BigDecimal;
 
 @Getter
 @Builder
@@ -26,6 +27,8 @@ public class ReviewResponse {
     private List<String> images;
     private LocalDateTime createdAt;
     private ReplyResponse reply;
+    private String sentiment;
+    private BigDecimal sentimentConfidence;
 
     public static ReviewResponse from(Review review, ReviewReply reply, List<String> images) {
         return ReviewResponse.builder()
@@ -40,6 +43,8 @@ public class ReviewResponse {
                 .buyerName(review.getBuyer().getFullName())
                 .rating(review.getRating())
                 .content(review.getContent())
+                .sentiment(review.getSentiment())
+                .sentimentConfidence(review.getSentimentConfidence())
                 .images(images == null ? List.of() : images)
                 .createdAt(review.getCreatedAt())
                 .reply(reply == null ? null : ReplyResponse.from(reply))

@@ -24,6 +24,8 @@ import com.example.demo.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.example.demo.dto.sentiment.SentimentResponse;
+import java.math.BigDecimal;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -50,6 +52,7 @@ public class ReviewService {
     private final OrderItemRepository orderItemRepository;
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
+    private final SentimentAnalysisService sentimentAnalysisService;
 
     @Transactional(readOnly = true)
     public List<ReviewableItemResponse> getReviewableItems() {
@@ -60,44 +63,65 @@ public class ReviewService {
     }
 
     @Transactional
-    public ReviewResponse createReview(ReviewRequest request) {
-        User buyer = currentUser();
-        OrderItem item = orderItemRepository.findById(request.getOrderItemId())
-                .orElseThrow(() -> ApiException.notFound("Không tìm thấy sản phẩm trong đơn hàng."));
-        Order order = item.getOrder();
+public ReviewResponse createReview(ReviewRequest request) {
+    User buyer = currentUser();
 
-        if (!order.getBuyer().getId().equals(buyer.getId())) {
-            throw ApiException.forbidden("Bạn chỉ có thể đánh giá sản phẩm mình đã mua.");
-        }
-        if (!REVIEWABLE_STATUSES.contains(order.getStatus())) {
-            throw ApiException.conflict("Chỉ có thể đánh giá sau khi đơn hàng đã được giao.");
-        }
-        if (item.getProduct().getSeller().getId().equals(buyer.getId())) {
-            throw ApiException.forbidden("Bạn không thể đánh giá sản phẩm của chính mình.");
-        }
-        if (reviewRepository.existsByOrderItem(item)) {
-            throw ApiException.conflict("Bạn đã đánh giá sản phẩm này rồi.");
-        }
+    OrderItem item = orderItemRepository.findById(request.getOrderItemId())
+            .orElseThrow(() -> ApiException.notFound("Không tìm thấy sản phẩm trong đơn hàng."));
 
-        List<String> imageUrls = normalizeImageUrls(request.getImageUrls());
+    Order order = item.getOrder();
 
-        Review review = new Review();
-        review.setOrderItem(item);
-        review.setBuyer(buyer);
-        review.setRating(request.getRating());
-        review.setContent(request.getContent().trim());
-        Review saved = reviewRepository.save(review);
-
-        for (int index = 0; index < imageUrls.size(); index++) {
-            ReviewImage image = new ReviewImage();
-            image.setReview(saved);
-            image.setImageUrl(imageUrls.get(index));
-            image.setDisplayOrder(index);
-            reviewImageRepository.save(image);
-        }
-
-        return ReviewResponse.from(saved, null, imageUrls);
+    if (!order.getBuyer().getId().equals(buyer.getId())) {
+        throw ApiException.forbidden("Bạn chỉ có thể đánh giá sản phẩm mình đã mua.");
     }
+
+    if (!REVIEWABLE_STATUSES.contains(order.getStatus())) {
+        throw ApiException.conflict("Chỉ có thể đánh giá sau khi đơn hàng đã được giao.");
+    }
+
+    if (item.getProduct().getSeller().getId().equals(buyer.getId())) {
+        throw ApiException.forbidden("Bạn không thể đánh giá sản phẩm của chính mình.");
+    }
+
+    if (reviewRepository.existsByOrderItem(item)) {
+        throw ApiException.conflict("Bạn đã đánh giá sản phẩm này rồi.");
+    }
+
+    // Chuẩn hóa nội dung đánh giá
+    String content = request.getContent().trim();
+
+    // Gọi AI phân tích cảm xúc
+    SentimentResponse sentimentResult = sentimentAnalysisService.analyze(content);
+
+    // Chuẩn hóa danh sách ảnh
+    List<String> imageUrls = normalizeImageUrls(request.getImageUrls());
+
+    // Tạo đánh giá
+    Review review = new Review();
+    review.setOrderItem(item);
+    review.setBuyer(buyer);
+    review.setRating(request.getRating());
+    review.setContent(content);
+
+    // Lưu kết quả phân tích AI
+    review.setSentiment(sentimentResult.getSentiment());
+    review.setSentimentConfidence(
+            BigDecimal.valueOf(sentimentResult.getConfidence())
+    );
+
+    Review saved = reviewRepository.save(review);
+
+    // Lưu ảnh đánh giá
+    for (int index = 0; index < imageUrls.size(); index++) {
+        ReviewImage image = new ReviewImage();
+        image.setReview(saved);
+        image.setImageUrl(imageUrls.get(index));
+        image.setDisplayOrder(index);
+        reviewImageRepository.save(image);
+    }
+
+    return ReviewResponse.from(saved, null, imageUrls);
+}
 
     @Transactional(readOnly = true)
     public List<ReviewResponse> getMyReviews() {
