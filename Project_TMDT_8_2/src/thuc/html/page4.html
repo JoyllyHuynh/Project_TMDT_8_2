@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Đánh giá sản phẩm | ComicHub</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap">
     <link rel="stylesheet" href="../../shared/styles/global-design-tokens.css">
     <link rel="stylesheet" href="../css/page4.css">
     <link rel="stylesheet" href="../css/page4-rating.css">
@@ -19,6 +22,8 @@
         .panel-head h2 { margin: 0; font-size: 1.02rem; }
         .muted { color: #64748b; font-size: .82rem; }
         .empty { margin: 0; padding: 12px 0; color: #64748b; font-size: .88rem; }
+        .review-history-panel { padding: 20px; }
+        .review-history-panel .empty { padding: 14px 16px; border-radius: 8px; background: #f8fafc; line-height: 1.55; }
         .reviewable-list { display: grid; gap: 12px; }
         .reviewable { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; padding: 14px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
         .reviewable-main { display: flex; align-items: center; gap: 12px; min-width: 240px; flex: 1; }
@@ -104,7 +109,6 @@
                 <h1>Đánh Giá Truyện</h1>
                 <p>Chia sẻ trải nghiệm của bạn để giúp cộng đồng MangaTrade mua bán manga minh bạch và an toàn hơn. Mỗi sản phẩm trong đơn đã giao chỉ được đánh giá một lần.</p>
             </div>
-            <div class="review-score"><strong>4.9</strong><span>★ ★ ★ ★ ★</span><small>Điểm uy tín của bạn</small></div>
         </section>
 
         <div class="layout">
@@ -165,7 +169,7 @@
                     </div>
                 </section>
 
-                <section class="panel">
+                <section class="panel review-history-panel">
                     <div class="panel-head"><h2>Đánh giá đã gửi</h2></div>
                     <div id="myReviewList"></div>
                 </section>
@@ -177,11 +181,6 @@
                     <h3>Đánh giá giúp cộng đồng</h3>
                     <p>Đánh giá thật giúp người mua nhận biết shop uy tín và giúp người bán cải thiện chất lượng phục vụ.</p>
                     <ul><li>Không đánh giá sai sự thật</li><li>Không đăng thông tin cá nhân</li><li>Tôn trọng cộng đồng Otaku</li></ul>
-                </section>
-
-                <section class="panel seller">
-                    <div class="seller-head"><div class="avatar large">OS</div><div><h3>OtakuStoreVN</h3><span>Hà Nội • Thành viên 3 năm</span></div></div>
-                    <div class="seller-score"><strong>4.98</strong><span>★★★★★</span><small>1.248 đánh giá</small></div>
                 </section>
 
                 <section class="panel tip"><span class="material-symbols-outlined">lightbulb</span><div><h3>Mẹo đánh giá hữu ích</h3><p>Chọn một mức sao tổng thể và chia sẻ ngắn gọn trải nghiệm thực tế của bạn.</p></div></section>
