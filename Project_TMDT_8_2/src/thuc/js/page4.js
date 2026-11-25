@@ -200,12 +200,19 @@ async function load() {
             apiRequest("/api/reviews/reviewable"),
             apiRequest("/api/reviews/mine")
         ]);
-        reviewableItems = reviewableResponse.data || [];
+        const requestedProductId = Number(new URLSearchParams(window.location.search).get("productId"));
+        reviewableItems = (reviewableResponse.data || []).filter((item) =>
+            !requestedProductId || Number(item.productId) === requestedProductId
+        );
         renderReviewable();
         renderMyReviews(mineResponse.data || []);
 
         const preselect = Number(new URLSearchParams(window.location.search).get("orderItemId"));
-        if (preselect) openForm(preselect);
+        if (preselect) {
+            openForm(preselect);
+        } else if (requestedProductId && reviewableItems.length === 1) {
+            openForm(reviewableItems[0].id);
+        }
     } catch (error) {
         if (error.status === 401) {
             window.location.href = "../../vu/auth/login/login.html";

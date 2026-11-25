@@ -1,3 +1,5 @@
+import { apiRequest } from "../../shared/api-client.js";
+
 document.addEventListener('DOMContentLoaded', () => {
     'use strict';
 
@@ -107,6 +109,167 @@ document.addEventListener('DOMContentLoaded', () => {
     const tabButtons = document.querySelectorAll('.tabs-header-bar .tab-button, .comic-tabs-container button[role="tab"]');
     const contentArea = document.querySelector('.comic-tabs-container article, .comic-tabs-container .tab-pane, .comic-tabs-container > div:last-child');
 
+    let loadedReviewsProductId = null;
+
+    const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    })[character]);
+
+    const formatReviewDate = (value) => {
+        if (!value) return 'Ngày không xác định';
+        const date = new Date(value);
+        return Number.isNaN(date.getTime())
+            ? 'Ngày không xác định'
+            : date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    };
+
+    const reviewStars = (rating) => Array.from({ length: 5 }, (_, index) =>
+        `<i class="fa-${index < Number(rating) ? 'solid' : 'regular'} fa-star"></i>`
+    ).join('');
+
+    const safeReviewImageUrl = (value) => {
+        if (typeof value !== 'string' || !value.trim()) return null;
+        try {
+            const url = new URL(value, window.location.origin);
+            return ['http:', 'https:'].includes(url.protocol) ? url.href : null;
+        } catch {
+            return null;
+        }
+    };
+
+    const renderReview = (review) => {
+        const images = (review.images || []).map((value) => {
+            const url = safeReviewImageUrl(value);
+            return url
+                ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(url)}" alt="Ảnh do người mua đăng" loading="lazy" style="width:76px;height:76px;object-fit:cover;border-radius:8px;"></a>`
+                : '';
+        }).join('');
+        const sentimentLabels = {
+            Positive: 'Tích cực',
+            Neutral: 'Trung tính',
+            Negative: 'Tiêu cực'
+        };
+        const sentiment = Object.prototype.hasOwnProperty.call(sentimentLabels, review.sentiment)
+            ? sentimentLabels[review.sentiment]
+            : null;
+        const confidence = Number(review.sentimentConfidence);
+        const sentimentBadge = sentiment
+            ? `<span style="font-size:11px;color:#475569;background:#f1f5f9;border-radius:999px;padding:4px 8px;">AI: ${sentiment}${review.sentimentConfidence != null && Number.isFinite(confidence) ? ` (${Math.round(confidence * 100)}%)` : ''}</span>`
+            : '';
+        const reply = review.reply
+            ? `<div style="margin-top:12px;padding:12px;border-left:3px solid #f97316;background:#fff7ed;border-radius:6px;"><strong>Phản hồi từ ${escapeHtml(review.reply.sellerName || 'người bán')}</strong><p style="margin:6px 0 0;">${escapeHtml(review.reply.content)}</p></div>`
+            : '';
+
+        return `
+            <article style="border:1px solid #e2e8f0;border-radius:12px;padding:16px;background:#fff;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+                    <div>
+                        <strong>${escapeHtml(review.buyerName || 'Người mua')}</strong>
+                        <div style="color:#f59e0b;margin-top:5px;">${reviewStars(review.rating)}</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        ${sentimentBadge}
+                        <time style="font-size:12px;color:#64748b;">${escapeHtml(formatReviewDate(review.createdAt))}</time>
+                    </div>
+                </div>
+                <p style="font-size:14px;color:#475569;line-height:1.6;white-space:pre-wrap;margin:12px 0 0;">${escapeHtml(review.content)}</p>
+                ${images ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">${images}</div>` : ''}
+                ${reply}
+            </article>`;
+    };
+
+    const renderProductReviews = (productReviews) => {
+        const total = Number(productReviews.totalReviews) || 0;
+        const average = Number(productReviews.averageRating) || 0;
+        const distribution = productReviews.distribution || {};
+        const rows = [5, 4, 3, 2, 1].map((star) => {
+            const count = Number(distribution[star]) || 0;
+            const percent = total ? Math.round((count / total) * 100) : 0;
+            return `
+                <div style="display:grid;grid-template-columns:42px minmax(80px,1fr) 70px;align-items:center;gap:8px;font-size:12px;color:#64748b;">
+                    <span>${star} <i class="fa-solid fa-star" style="color:#f59e0b;"></i></span>
+                    <span style="height:7px;background:#e2e8f0;border-radius:8px;overflow:hidden;"><span style="display:block;width:${percent}%;height:100%;background:#f59e0b;"></span></span>
+                    <span>${count} (${percent}%)</span>
+                </div>`;
+        }).join('');
+        const reviews = Array.isArray(productReviews.reviews) ? productReviews.reviews : [];
+
+        return `
+            <div class="reviews-wrapper" style="animation:fadeIn 0.3s ease;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+                    <div>
+                        <h2 style="font-size:20px;font-weight:800;color:#0f172a;">Đánh giá của người mua (${total})</h2>
+                        <div style="display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap;">
+                            <strong style="font-size:22px;color:#f97316;">${average.toFixed(1)}</strong>
+                            <span style="color:#f59e0b;">${reviewStars(Math.round(average))}</span>
+                            <span style="font-size:12px;color:#64748b;">${total} đánh giá đã xác thực từ giao dịch</span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-write-review" style="background:#f97316;color:white;border:0;font-weight:700;font-size:12px;padding:10px 18px;border-radius:9999px;cursor:pointer;display:flex;align-items:center;gap:6px;">
+                        <i class="fa-regular fa-pen-to-square"></i> Viết đánh giá
+                    </button>
+                </div>
+                <div style="display:grid;gap:6px;margin-bottom:20px;">${rows}</div>
+                <div style="display:flex;flex-direction:column;gap:12px;">
+                    ${reviews.length
+                ? reviews.map(renderReview).join('')
+                : '<p style="color:#64748b;">Chưa có đánh giá nào cho truyện này.</p>'}
+                </div>
+            </div>`;
+    };
+
+    const loadProductReviews = async () => {
+        if (!contentArea) return;
+        const productId = document.querySelector('.comic-detail-section')?.dataset.productId;
+        if (!productId) {
+            contentArea.innerHTML = `
+                <div role="status">
+                    <p>Đang tải thông tin sản phẩm.</p>
+                    <button type="button" class="btn-retry-reviews">Thử tải lại</button>
+                </div>`;
+            contentArea.querySelector('.btn-retry-reviews')?.addEventListener('click', loadProductReviews);
+            return;
+        }
+        if (loadedReviewsProductId === productId) return;
+
+        contentArea.innerHTML = '<p role="status">Đang tải đánh giá...</p>';
+        try {
+            const response = await apiRequest(`/api/products/${encodeURIComponent(productId)}/reviews`);
+            const productReviews = response.data;
+            if (!productReviews
+                || !Array.isArray(productReviews.reviews)
+                || typeof productReviews.averageRating !== 'number'
+                || !Number.isFinite(productReviews.averageRating)
+                || typeof productReviews.totalReviews !== 'number'
+                || !Number.isFinite(productReviews.totalReviews)
+                || !productReviews.distribution
+                || typeof productReviews.distribution !== 'object'
+                || Array.isArray(productReviews.distribution)) {
+                throw new Error('Dữ liệu đánh giá từ máy chủ không đúng định dạng.');
+            }
+            contentArea.innerHTML = renderProductReviews(productReviews);
+            loadedReviewsProductId = productId;
+
+            const tab = tabButtons[2];
+            if (tab) tab.textContent = `3. Đánh Giá Từ Độc Giả (${Number(productReviews.totalReviews) || 0})`;
+
+            contentArea.querySelector('.btn-write-review')?.addEventListener('click', () => {
+                window.location.href = `../../thuc/html/page4.html?productId=${encodeURIComponent(productId)}`;
+            });
+        } catch (error) {
+            contentArea.innerHTML = `
+                <div role="alert" style="padding:16px;border:1px solid #fecaca;border-radius:10px;color:#991b1b;background:#fef2f2;">
+                    <p>${escapeHtml(error.message || 'Không thể tải đánh giá.')}</p>
+                    <button type="button" class="btn-retry-reviews" style="margin-top:10px;">Thử tải lại</button>
+                </div>`;
+            contentArea.querySelector('.btn-retry-reviews')?.addEventListener('click', loadProductReviews);
+        }
+    };
+
     const tabContents = [
         // Tab 1: Giới thiệu & Cốt truyện
         `
@@ -187,60 +350,8 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
     `,
 
-        // Tab 3: Đánh giá từ độc giả (18)
-        `
-    <div class="reviews-wrapper" style="animation: fadeIn 0.3s ease;">
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
-        <div>
-          <h2 style="font-size: 20px; font-weight: 800; color: #0f172a; font-family: var(--font-headline);">
-            Đánh Giá Từ Cộng Đồng Độc Giả (18 Đánh Giá)
-          </h2>
-          <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
-            <span style="font-size: 22px; font-weight: 800; color: #f97316;">5.0</span>
-            <div style="color: #f59e0b; font-size: 13px;">
-              <i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i>
-            </div>
-            <span style="font-size: 12px; color: #64748b;">• 100% đánh giá hài lòng về độ mới & tình trạng sách</span>
-          </div>
-        </div>
-        <button type="button" class="btn-write-review" style="background: #f97316; color: white; border: none; font-weight: 700; font-size: 12px; padding: 10px 18px; border-radius: 9999px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-          <i class="fa-regular fa-pen-to-square"></i> Viết Đánh Giá
-        </button>
-      </div>
-
-      <div style="display: flex; flex-direction: column; gap: 14px;">
-        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <div style="width: 28px; height: 28px; border-radius: 50%; background: #fed7aa; color: #f97316; font-weight: 800; display: flex; align-items: center; justify-content: center; font-size: 11px;">M</div>
-              <strong style="font-size: 13px; color: #0f172a;">Minh Nhật (Hà Nội)</strong>
-              <span style="background: #dcfce7; color: #16a34a; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px;">Đã giao lưu thành công</span>
-            </div>
-            <span style="font-size: 11px; color: #94a3b8;">Hôm qua</span>
-          </div>
-          <div style="color: #f59e0b; font-size: 11px; margin-bottom: 4px;">
-            <i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i>
-          </div>
-          <p style="font-size: 13px; color: #475569; line-height: 1.45;">Bộ Slam Dunk tuyệt đẹp! Bìa rời phẳng phiu không một vết cấn, 24 postcard nguyên vẹn trong seal như mô tả. Đóng gói 4 lớp của shop cực kỳ yên tâm.</p>
-        </div>
-
-        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <div style="width: 28px; height: 28px; border-radius: 50%; background: #dbeafe; color: #2563eb; font-weight: 800; display: flex; align-items: center; justify-content: center; font-size: 11px;">T</div>
-              <strong style="font-size: 13px; color: #0f172a;">Tuấn Kiệt (TP. HCM)</strong>
-              <span style="background: #e0e7ff; color: #4338ca; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px;">Đổi Barter 1-1</span>
-            </div>
-            <span style="font-size: 11px; color: #94a3b8;">3 ngày trước</span>
-          </div>
-          <div style="color: #f59e0b; font-size: 11px; margin-bottom: 4px;">
-            <i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i>
-          </div>
-          <p style="font-size: 13px; color: #475569; line-height: 1.45;">Giao dịch qua ký quỹ ComicHub rất tiện, hai bên đồng kiểm xong hệ thống mới chuyển tiền bù. Anh Vinh chủ sách nói chuyện rất nhiệt tình!</p>
-        </div>
-      </div>
-    </div>
-    `
+        // Tab 3: Đánh giá từ người mua trên sản phẩm này
+        '<p role="status">Chọn tab để tải đánh giá.</p>'
     ];
 
     if (tabButtons.length > 0) {
@@ -260,13 +371,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (contentArea && tabContents[index]) {
                     contentArea.innerHTML = tabContents[index];
-
-                    const btnReview = contentArea.querySelector('.btn-write-review');
-                    if (btnReview) {
-                        btnReview.addEventListener('click', () => {
-                            showToast('Tính năng gửi đánh giá sẽ mở sau khi bạn hoàn tất nhận hàng!', 'info', 'fa-pen');
-                        });
-                    }
+                    if (index === 2) loadProductReviews();
                 }
             });
         });
